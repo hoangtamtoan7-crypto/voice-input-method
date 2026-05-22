@@ -137,22 +137,36 @@ var SherpaEngine = (function () {
       if (initPromise) return initPromise;
 
       initPromise = new Promise(function (resolve) {
+        var resolved = false;
+        var timeoutId = null;
+
+        function finish(ok, err) {
+          if (resolved) return;
+          resolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          if (err) initError = err;
+          resolve(ok);
+        }
+
+        // 超时保护：30 秒后若仍未初始化则报错
+        timeoutId = setTimeout(function () {
+          finish(false, '离线引擎加载超时。请使用 HTTP 服务器打开页面，或切换到百度引擎。');
+        }, 30000);
+
         setupModule();
 
         var onReady = function () {
           try {
             if (typeof createOnlineRecognizer === 'undefined') {
-              initError = 'ASR wrapper 未加载';
-              resolve(false);
+              finish(false, 'ASR wrapper 未加载');
               return;
             }
             recognizer = createOnlineRecognizer(Module);
             _isSupported = true;
             console.log('[sherpa-onnx] 离线引擎就绪');
-            resolve(true);
+            finish(true);
           } catch (e) {
-            initError = '识别器初始化失败: ' + e.message;
-            resolve(false);
+            finish(false, '识别器初始化失败: ' + e.message);
           }
         };
 
@@ -165,12 +179,10 @@ var SherpaEngine = (function () {
         Module.onRuntimeInitialized = onReady;
 
         // Load WASM glue → ASR wrapper
-        // Script load failure = model files not installed
         loadScript('js/sherpa/sherpa-onnx-wasm-main-asr.js').then(function () {
           return loadScript('js/sherpa/sherpa-onnx-asr.js');
         }).catch(function (err) {
-          initError = 'sherpa-onnx 模型未安装。请运行: bash scripts/download-sherpa-models.sh';
-          resolve(false);
+          finish(false, 'sherpa-onnx 模型未安装。请运行: bash scripts/download-sherpa-models.sh');
         });
       });
 

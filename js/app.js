@@ -399,12 +399,12 @@
     init();
 
     function init() {
-      // 检测可用引擎（优先级：离线 > 百度国内 > 在线VPN）
+      // 检测可用引擎
+      var isFileProtocol = window.location.protocol === 'file:';
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
       var webspeech = new SpeechRecognizer();
 
-      // Sherpa 引擎懒加载（isSupported 初始为 false，需异步加载 WASM）
       if (sherpa) {
         engines.sherpa = sherpa;
       }
@@ -415,8 +415,14 @@
         engines.webspeech = webspeech;
       }
 
-      // 选择引擎：离线 > 百度API > 在线
-      if (engines.sherpa) {
+      // 选择引擎：
+      //   HTTP/HTTPS: 离线 > 百度 > 在线
+      //   file://:    百度 > 在线 > 离线（离线 WASM 需 HTTP 服务加载）
+      if (isFileProtocol && engines.baidu) {
+        setEngine('baidu');
+      } else if (isFileProtocol && engines.webspeech) {
+        setEngine('webspeech');
+      } else if (engines.sherpa) {
         setEngine('sherpa');
       } else if (engines.baidu) {
         setEngine('baidu');
