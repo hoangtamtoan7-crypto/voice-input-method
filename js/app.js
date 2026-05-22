@@ -400,7 +400,6 @@
 
     function init() {
       // 检测可用引擎
-      var isFileProtocol = window.location.protocol === 'file:';
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
       var webspeech = new SpeechRecognizer();
@@ -415,17 +414,12 @@
         engines.webspeech = webspeech;
       }
 
-      // 选择引擎：
-      //   HTTP/HTTPS: 离线 > 百度 > 在线
-      //   file://:    百度 > 在线 > 离线（离线 WASM 需 HTTP 服务加载）
-      if (isFileProtocol && engines.baidu) {
+      // 选择引擎：百度已配置 > 离线 > 在线
+      // （百度引擎即连即用，离线引擎需加载 190MB 模型，仅在百度未配置时启用）
+      if (engines.baidu) {
         setEngine('baidu');
-      } else if (isFileProtocol && engines.webspeech) {
-        setEngine('webspeech');
       } else if (engines.sherpa) {
         setEngine('sherpa');
-      } else if (engines.baidu) {
-        setEngine('baidu');
       } else if (engines.webspeech) {
         setEngine('webspeech');
       } else {
