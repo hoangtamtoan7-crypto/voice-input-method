@@ -399,20 +399,26 @@
     init();
 
     function init() {
-      // 检测可用引擎
+      // 检测可用引擎（优先级：离线 > 百度国内 > 在线VPN）
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
+      var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
       var webspeech = new SpeechRecognizer();
 
       if (sherpa && sherpa.isSupported) {
         engines.sherpa = sherpa;
       }
+      if (baidu && baidu.isConfigured) {
+        engines.baidu = baidu;
+      }
       if (webspeech.isSupported) {
         engines.webspeech = webspeech;
       }
 
-      // 选择引擎：优先离线引擎（无需VPN）
+      // 选择引擎：离线 > 百度API > 在线
       if (engines.sherpa) {
         setEngine('sherpa');
+      } else if (engines.baidu) {
+        setEngine('baidu');
       } else if (engines.webspeech) {
         setEngine('webspeech');
       } else {
@@ -480,7 +486,8 @@
           var nextName = engineNames[(currentIdx + 1) % engineNames.length];
           setEngine(nextName);
           setupRecognizerCallbacks();
-          ui.showToast('已切换到' + (nextName === 'sherpa' ? '离线引擎 (sherpa-onnx)' : '在线引擎 (Web Speech)'), 2000);
+          var labels = { sherpa: '离线引擎 (sherpa-onnx)', baidu: '百度引擎 (国内直连)', webspeech: '在线引擎 (Web Speech)' };
+          ui.showToast('已切换到' + (labels[nextName] || nextName), 2000);
         });
       }
     }
@@ -492,14 +499,17 @@
       if (activeEngineName === 'sherpa') {
         badge.textContent = '离线引擎';
         badge.title = 'sherpa-onnx 本地识别，无需网络';
+      } else if (activeEngineName === 'baidu') {
+        badge.textContent = '百度引擎';
+        badge.title = '百度实时语音识别，国内直连';
       } else if (activeEngineName === 'webspeech') {
         badge.textContent = '在线引擎';
         badge.classList.add('online');
-        badge.title = 'Web Speech API，需VPN连接Google服务器';
+        badge.title = 'Web Speech API，需VPN连接Google';
       } else if (Object.keys(engines).length === 0) {
         badge.textContent = '无可用引擎';
         badge.classList.add('unavailable');
-        badge.title = '请安装离线模型或使用Chrome浏览器';
+        badge.title = '请安装离线模型、配置百度API或使用Chrome';
       }
     }
 
