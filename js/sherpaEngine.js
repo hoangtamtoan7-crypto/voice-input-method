@@ -38,7 +38,11 @@ var SherpaEngine = (function () {
         var actualRate = audioContext.sampleRate;
         processor = audioContext.createScriptProcessor(4096, 1, 1);
         source.connect(processor);
-        processor.connect(audioContext.destination);
+        // 零音量输出避免回声（ScriptProcessor 需要连接到 destination 才能触发 onaudioprocess）
+        var zeroGain = audioContext.createGain();
+        zeroGain.gain.value = 0;
+        processor.connect(zeroGain);
+        zeroGain.connect(audioContext.destination);
 
         processor.onaudioprocess = function (event) {
           if (!isCapturing || !onSamples) return;

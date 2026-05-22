@@ -105,6 +105,8 @@ body {
 .status-time { font-size: 0.8rem; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; }
 .engine-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all var(--transition); user-select: none; }
 .engine-badge:hover { background: var(--color-primary); color: #fff; }
+.engine-badge.baidu { background: rgba(46,196,182,0.15); color: var(--color-success); }
+.engine-badge.baidu:hover { background: var(--color-success); color: #fff; }
 .engine-badge.online { background: rgba(255,159,28,0.15); color: var(--color-warning); }
 .engine-badge.online:hover { background: var(--color-warning); color: #fff; }
 .engine-badge.unavailable { background: rgba(230,57,70,0.08); color: var(--color-danger); text-decoration: line-through; }

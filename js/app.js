@@ -224,7 +224,8 @@
       tipsModal:      document.getElementById('tipsModal'),
       tipsCloseBtn:   document.getElementById('tipsCloseBtn'),
       clearHistoryBtn: document.getElementById('clearHistoryBtn'),
-      punctBar:       document.getElementById('punctBar')
+      punctBar:       document.getElementById('punctBar'),
+      engineBadge:    document.getElementById('engineBadge')
     };
 
     // init theme
@@ -394,6 +395,8 @@
     var undoStack = [];
     var maxUndo = 30;
     var autoRestart = true;
+    var isStarting = false;   // 防止双击竞态
+    var autoRestartCount = 0; // 防止无限自动重启
     var draftSaveTimer = null;
 
     init();
@@ -476,10 +479,17 @@
         // 切换引擎后自动恢复录音
         setTimeout(function () {
           var result = recognizer.start();
-          if (result.success || (result.then && result.then(function(r) { return r.success; }))) {
-            ui.setRecordingState(true);
-            ui.setStatus('listening', '录音中');
-            ui.startTimer();
+          function onSwitchStart(r) {
+            if (r && r.success) {
+              ui.setRecordingState(true);
+              ui.setStatus('listening', '录音中');
+              ui.startTimer();
+            }
+          }
+          if (result && result.then) {
+            result.then(onSwitchStart);
+          } else {
+            onSwitchStart(result);
           }
         }, 300);
       }
@@ -514,6 +524,7 @@
         badge.title = 'sherpa-onnx 本地识别，无需网络';
       } else if (activeEngineName === 'baidu') {
         badge.textContent = '百度引擎';
+        badge.classList.add('baidu');
         badge.title = '百度实时语音识别，国内直连';
       } else if (activeEngineName === 'webspeech') {
         badge.textContent = '在线引擎';
@@ -660,7 +671,6 @@
     }
 
     function setupRecognizerCallbacks() {
-      var self = this;
       // Reset old engine callbacks
       if (activeEngine) {
         setupResultsAndErrors();
@@ -710,8 +720,9 @@
             ui.renderHistory(storage.getAll(), function (id) { deleteHistory(id); });
           }
 
-          // Auto-restart (only for online engines that might time out)
-          if (autoRestart && info && !info.intentional && activeEngineName === 'webspeech' && finalText.length > 0) {
+          // Auto-restart (only for Web Speech, max 3 retries)
+          if (autoRestart && info && !info.intentional && activeEngineName === 'webspeech' && finalText.length > 0 && autoRestartCount < 3) {
+            autoRestartCount++;
             setTimeout(function () {
               if (!recognizer.isListening) {
                 var r = recognizer.start();
@@ -752,13 +763,17 @@
     function toggleRecording() {
       if (recognizer.isListening) {
         autoRestart = false;
+        autoRestartCount = 0;
         recognizer.stop();
       } else {
+        if (isStarting) return; // 防止双击竞态
+        isStarting = true;
         autoRestart = true;
+        autoRestartCount = 0;
         var result = recognizer.start();
 
-        // 处理同步和异步（Promise）两种返回
         function handleStart(r) {
+          isStarting = false;
           if (r.success) {
             ui.setRecordingState(true);
             ui.setStatus('listening', '录音中');
@@ -770,6 +785,7 @@
 
         if (result && result.then) {
           result.then(handleStart).catch(function (err) {
+            isStarting = false;
             ui.showToast(err.message || '启动失败', 3000, true);
           });
         } else {

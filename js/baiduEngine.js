@@ -12,9 +12,9 @@ var BaiduEngine = (function () {
 
   // ========== 配置（在此填入百度API凭据） ==========
   var BAIDU_CONFIG = {
-    appid: '',       // 百度智能云 AppID
-    appkey: '',      // 百度智能云 API Key
-    secret: '',      // 百度智能云 Secret Key
+    appid: '123422897',       // 百度智能云 AppID
+    appkey: '63jFK1A0I83WeUGQcbuOmJDY',      // 百度智能云 API Key
+    secret: 'xPr3Z7v4NGNdeL3qfOOirv5JdEo3HgkM',      // 百度智能云 Secret Key
     dev_pid: 15372,  // 识别模型: 1537=普通话(弱标点) 15372=普通话(加强标点) 1737=英语
     wsUrl: 'wss://vop.baidu.com/realtime_asr'
   };
@@ -50,7 +50,10 @@ var BaiduEngine = (function () {
         var actualRate = audioContext.sampleRate;
         processor = audioContext.createScriptProcessor(4096, 1, 1);
         source.connect(processor);
-        processor.connect(audioContext.destination);
+        var zeroGain = audioContext.createGain();
+        zeroGain.gain.value = 0;
+        processor.connect(zeroGain);
+        zeroGain.connect(audioContext.destination);
 
         processor.onaudioprocess = function (event) {
           if (!isCapturing || !onSamples) return;
@@ -176,6 +179,8 @@ var BaiduEngine = (function () {
           }));
         };
 
+        var speechStarted = false;
+
         ws.onmessage = function (event) {
           try {
             var msg = JSON.parse(event.data);
@@ -186,10 +191,12 @@ var BaiduEngine = (function () {
             return;
           }
 
-          if (msg.type === 'MID_TEXT' && resultCallback) {
-            resultCallback({ final: '', interim: msg.result || '' });
-          } else if (msg.type === 'FIN_TEXT' && resultCallback) {
-            resultCallback({ final: msg.result || '', interim: '' });
+          if (msg.type === 'MID_TEXT') {
+            if (!speechStarted && speechStartCallback) { speechStarted = true; speechStartCallback(); }
+            if (resultCallback) resultCallback({ final: '', interim: msg.result || '' });
+          } else if (msg.type === 'FIN_TEXT') {
+            if (speechStarted && speechEndCallback) { speechEndCallback(); speechStarted = false; }
+            if (resultCallback) resultCallback({ final: msg.result || '', interim: '' });
           }
         };
 
