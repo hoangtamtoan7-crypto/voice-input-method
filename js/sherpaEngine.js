@@ -2,17 +2,16 @@
  * sherpa-onnx 离线语音识别引擎
  * 纯本地识别，无需网络，无需VPN
  *
- * 使用方法：
- * 1. 运行 scripts/download-sherpa-models.sh 下载模型和WASM文件
- * 2. 此引擎自动检测文件是否存在，存在则使用离线引擎，否则回退到Web Speech API
- *
- * 接口与 SpeechRecognizer 完全一致，可无缝替换
+ * 使用前需下载 WASM 模型包到 js/sherpa/ 目录：
+ * - sherpa-onnx-wasm-main-asr.js (Emscripten glue)
+ * - sherpa-onnx-wasm-main-asr.wasm (WebAssembly SIMD)
+ * - sherpa-onnx-wasm-main-asr.data (zh-en Zipformer 模型)
+ * - sherpa-onnx-asr.js (ASR wrapper)
  */
 var SherpaEngine = (function () {
   'use strict';
 
   // ==================== AudioCapture ====================
-  // 从浏览器麦克风捕获音频，重采样到 16kHz
   function AudioCapture() {
     var audioContext = null;
     var source = null;
@@ -36,27 +35,16 @@ var SherpaEngine = (function () {
       }}).then(function (mediaStream) {
         stream = mediaStream;
         source = audioContext.createMediaStreamSource(stream);
-
-        // 如果需要重采样，创建离线处理
         var actualRate = audioContext.sampleRate;
-        if (actualRate !== sampleRate) {
-          // 使用 ScriptProcessorNode 进行降采样
-          processor = audioContext.createScriptProcessor(4096, 1, 1);
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-        } else {
-          processor = audioContext.createScriptProcessor(4096, 1, 1);
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-        }
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        source.connect(processor);
+        processor.connect(audioContext.destination);
 
         processor.onaudioprocess = function (event) {
           if (!isCapturing || !onSamples) return;
           var input = event.inputBuffer.getChannelData(0);
           var samples;
-
           if (actualRate !== sampleRate) {
-            // 简单线性降采样
             var ratio = actualRate / sampleRate;
             var outLen = Math.floor(input.length / ratio);
             samples = new Float32Array(outLen);
@@ -73,7 +61,7 @@ var SherpaEngine = (function () {
 
     return {
       start: function (callback) {
-        if (isCapturing) return;
+        if (isCapturing) return Promise.resolve();
         if (!audioContext) {
           return init().then(function () {
             isCapturing = true;
@@ -87,8 +75,8 @@ var SherpaEngine = (function () {
       stop: function () {
         isCapturing = false;
         onSamples = null;
-        if (processor) processor.disconnect();
-        if (source) source.disconnect();
+        if (processor) { processor.disconnect(); processor = null; }
+        if (source) { source.disconnect(); source = null; }
         if (stream) {
           stream.getTracks().forEach(function (t) { t.stop(); });
           stream = null;
@@ -97,171 +85,33 @@ var SherpaEngine = (function () {
           audioContext.close().catch(function () {});
         }
         audioContext = null;
-        source = null;
-        processor = null;
-      },
-      isCapturing: function () { return isCapturing; }
+      }
     };
   }
 
   // ==================== SherpaEngine ====================
   function SherpaEngine() {
-    var isSupported = false;
     var isListening = false;
     var audioCapture = AudioCapture();
+    var recognizer = null;
+    var sherpaStream = null;
+    var initPromise = null;
+    var initError = null;
+    var _isSupported = false;
 
-    // 回调
+    // Callbacks
     var resultCallback = null;
     var errorCallback = null;
     var endCallback = null;
     var speechStartCallback = null;
     var speechEndCallback = null;
 
-    // sherpa-onnx 对象
-    var recognizer = null;
-    var sherpaStream = null;
-    var wasmModule = null;
-    var initError = null;
-    var initPromise = null;
-
-    // 语言映射：Web Speech API BCP47 → sherpa model
-    var supportedLanguages = ['zh-CN', 'en-US'];
     var currentLanguage = 'zh-CN';
-
-    function init() {
-      if (initPromise) return initPromise;
-
-      initPromise = new Promise(function (resolve) {
-        // 检查必需的 sherpa-onnx 文件是否存在
-        var basePath = 'js/sherpa/';
-        var requiredFiles = [
-          basePath + 'sherpa-onnx-asr.js',
-          basePath + 'model/encoder.onnx',
-          basePath + 'model/decoder.onnx',
-          basePath + 'model/joiner.onnx',
-          basePath + 'model/tokens.txt'
-        ];
-
-        checkFiles(requiredFiles).then(function (allExist) {
-          if (!allExist) {
-            initError = 'sherpa-onnx 模型文件未安装。请运行 scripts/download-sherpa-models.sh 下载';
-            isSupported = false;
-            resolve(false);
-            return;
-          }
-
-          // 加载 sherpa-onnx ASR wrapper
-          loadScript(basePath + 'sherpa-onnx-asr.js').then(function () {
-            // sherpa-onnx-asr.js 暴露全局 sherpa_onnx_asr 对象
-            if (typeof sherpa_onnx_asr === 'undefined') {
-              initError = 'sherpa-onnx ASR wrapper 加载失败';
-              isSupported = false;
-              resolve(false);
-              return;
-            }
-
-            // 加载 WASM 运行时
-            loadScript(basePath + 'sherpa-onnx-wasm-main-asr.js').then(function () {
-              // WASM 胶水脚本会创建全局 Module
-              if (typeof Module === 'undefined') {
-                initError = 'sherpa-onnx WASM 运行时加载失败';
-                isSupported = false;
-                resolve(false);
-                return;
-              }
-
-              wasmModule = Module;
-
-              // 创建在线识别器配置
-              try {
-                var config = buildConfig(wasmModule, basePath + 'model/');
-                recognizer = sherpa_onnx_asr.createOnlineRecognizer(wasmModule, config);
-                isSupported = true;
-                initError = null;
-                resolve(true);
-              } catch (e) {
-                initError = 'sherpa-onnx 识别器初始化失败: ' + e.message;
-                isSupported = false;
-                resolve(false);
-              }
-            }).catch(function () {
-              initError = 'sherpa-onnx WASM 运行时加载失败';
-              isSupported = false;
-              resolve(false);
-            });
-          }).catch(function () {
-            initError = 'sherpa-onnx ASR wrapper 加载失败';
-            isSupported = false;
-            resolve(false);
-          });
-        });
-      });
-
-      return initPromise;
-    }
-
-    function buildConfig(Module, modelDir) {
-      // 在 Emscripten 虚拟文件系统中创建模型文件
-      var encoderData = loadModelData(modelDir + 'encoder.onnx');
-      var decoderData = loadModelData(modelDir + 'decoder.onnx');
-      var joinerData = loadModelData(modelDir + 'joiner.onnx');
-      var tokensData = loadModelData(modelDir + 'tokens.txt');
-
-      // 构建配置对象 - 参数与 sherpa-onnx-asr.js 兼容
-      // 使用 transducer (Zipformer) 类型
-      var config = {
-        feat: {
-          sampleRate: 16000,
-          featureDim: 80
-        },
-        model: {
-          transducer: {
-            encoder: encoderData,
-            decoder: decoderData,
-            joiner: joinerData
-          },
-          tokens: new TextDecoder().decode(tokensData),
-          numThreads: 2,
-          provider: 'cpu',
-          modelType: ''  // 空字符串表示 transducer
-        },
-        // 端点检测配置
-        enableEndpoint: 1,
-        rule1MinTrailingSilence: 1.2,
-        rule2MinTrailingSilence: 0.5,
-        rule3MinUtteranceLength: 20.0
-      };
-      return config;
-    }
-
-    // 同步读取文件（用于 Emscripten FS 预加载）
-    // 注意：实际使用中模型文件通过 Emscripten --preload-file 预加载到虚拟 FS
-    // 这里的 loadModelData 是占位 - 实际路径会被 WASM 胶水代码处理
-    function loadModelData(path) {
-      // 在浏览器中通过 fetch 同步不可行
-      // 实际方法：模型文件在 WASM 编译时通过 --preload-file 打包进 .data 文件
-      // Emscripten 在 Module.preRun 中自动将文件加载到虚拟 FS
-      // 这里返回路径字符串，由 sherpa-onnx-asr 内部通过 FS 读取
-      return path;
-    }
-
-    function checkFiles(files) {
-      return Promise.all(files.map(function (f) {
-        return fetch(f, { method: 'HEAD' }).then(function (r) {
-          return r.ok;
-        }).catch(function () {
-          return false;
-        });
-      })).then(function (results) {
-        return results.every(function (r) { return r; });
-      });
-    }
 
     function loadScript(src) {
       return new Promise(function (resolve, reject) {
         var existing = document.querySelector('script[src="' + src + '"]');
         if (existing) { resolve(); return; }
-
         var script = document.createElement('script');
         script.src = src;
         script.onload = function () { resolve(); };
@@ -270,15 +120,85 @@ var SherpaEngine = (function () {
       });
     }
 
-    // ========== Public API (与 SpeechRecognizer 接口一致) ==========
+    function setupModule() {
+      // Module MUST be configured before loading the WASM glue script
+      if (typeof Module === 'undefined') {
+        window.Module = {};
+      }
+      Module.locateFile = function (path) {
+        return 'js/sherpa/' + path;
+      };
+      Module.setStatus = function (status) {
+        console.log('[sherpa-onnx] ' + status);
+      };
+    }
+
+    function init() {
+      if (initPromise) return initPromise;
+
+      initPromise = new Promise(function (resolve) {
+        var dataFile = 'js/sherpa/sherpa-onnx-wasm-main-asr.data';
+
+        // Check required files exist
+        fetch(dataFile, { method: 'HEAD' }).then(function (r) {
+          if (!r.ok) {
+            initError = 'sherpa-onnx 模型数据未找到，请下载 WASM 模型包';
+            resolve(false);
+            return;
+          }
+
+          setupModule();
+
+          var onReady = function () {
+            try {
+              // createOnlineRecognizer is from sherpa-onnx-asr.js
+              if (typeof createOnlineRecognizer === 'undefined') {
+                initError = 'ASR wrapper 未加载';
+                resolve(false);
+                return;
+              }
+              recognizer = createOnlineRecognizer(Module);
+              _isSupported = true;
+              console.log('[sherpa-onnx] 离线引擎就绪');
+              resolve(true);
+            } catch (e) {
+              initError = '识别器初始化失败: ' + e.message;
+              resolve(false);
+            }
+          };
+
+          // Check if WASM already initialized (e.g. from cache)
+          if (Module.calledRun) {
+            onReady();
+            return;
+          }
+
+          Module.onRuntimeInitialized = onReady;
+
+          // Load WASM glue → ASR wrapper
+          loadScript('js/sherpa/sherpa-onnx-wasm-main-asr.js').then(function () {
+            return loadScript('js/sherpa/sherpa-onnx-asr.js');
+          }).catch(function (err) {
+            initError = 'WASM 脚本加载失败: ' + err.message;
+            resolve(false);
+          });
+
+        }).catch(function () {
+          initError = 'sherpa-onnx 文件未安装，请先下载模型';
+          resolve(false);
+        });
+      });
+
+      return initPromise;
+    }
+
+    // ========== Public API ==========
 
     return {
-      get isSupported() { return isSupported; },
+      get isSupported() { return _isSupported; },
       get isListening() { return isListening; },
 
       set language(lang) {
-        // sherpa-onnx 模型固定语言，运行时不可切换
-        // SenseVoice 支持多语言自动检测
         currentLanguage = lang;
       },
 
@@ -289,8 +209,7 @@ var SherpaEngine = (function () {
       set onSpeechEnd(cb) { speechEndCallback = cb; },
 
       start: function () {
-        if (!isSupported) {
-          // 首次调用时尝试初始化
+        if (!_isSupported) {
           return init().then(function (ok) {
             if (!ok) {
               if (errorCallback) errorCallback({ error: 'engine-not-ready', message: initError });
@@ -305,16 +224,21 @@ var SherpaEngine = (function () {
       stop: function () {
         if (!isListening) return;
         audioCapture.stop();
+
         if (sherpaStream && recognizer) {
-          // 处理剩余音频
-          if (recognizer.isReady(sherpaStream)) {
-            recognizer.decode(sherpaStream);
-            var result = recognizer.getResult(sherpaStream);
-            if (result && resultCallback) {
-              resultCallback({ final: result, interim: '' });
+          try {
+            // Process any remaining audio
+            sherpaStream.inputFinished();
+            while (recognizer.isReady(sherpaStream)) {
+              recognizer.decode(sherpaStream);
             }
-          }
-          recognizer.reset(sherpaStream);
+            var result = recognizer.getResult(sherpaStream);
+            if (result && result.text && resultCallback) {
+              resultCallback({ final: result.text, interim: '' });
+            }
+          } catch (_) {}
+          sherpaStream.free();
+          sherpaStream = null;
         }
         isListening = false;
         if (endCallback) endCallback();
@@ -322,8 +246,7 @@ var SherpaEngine = (function () {
 
       destroy: function () {
         this.stop();
-        recognizer = null;
-        wasmModule = null;
+        if (recognizer) { recognizer.free(); recognizer = null; }
       },
 
       getInitError: function () { return initError; }
@@ -332,33 +255,50 @@ var SherpaEngine = (function () {
     function startRecognition() {
       if (isListening) return { success: false, error: '已经在录音中' };
 
-      var startPromise = audioCapture.start(function (samples) {
+      try {
+        sherpaStream = recognizer.createStream();
+      } catch (e) {
+        if (errorCallback) errorCallback({ error: 'recognizer', message: e.message });
+        return { success: false, error: e.message };
+      }
+
+      var speechStarted = false;
+
+      return audioCapture.start(function (samples) {
         if (!sherpaStream || !recognizer) return;
-        sherpaStream.acceptWaveform(16000, samples);
 
-        while (recognizer.isReady(sherpaStream)) {
-          recognizer.decode(sherpaStream);
-        }
+        try {
+          sherpaStream.acceptWaveform(16000, samples);
 
-        var result = recognizer.getResult(sherpaStream);
-        var isEndpoint = recognizer.isEndpoint(sherpaStream);
+          while (recognizer.isReady(sherpaStream)) {
+            recognizer.decode(sherpaStream);
+          }
 
-        if (result && resultCallback) {
-          resultCallback({ final: result, interim: '' });
-        }
+          var result = recognizer.getResult(sherpaStream);
+          var isEndpoint = recognizer.isEndpoint(sherpaStream);
 
-        if (isEndpoint) {
-          recognizer.reset(sherpaStream);
-        }
-      });
+          if (result && result.text && resultCallback) {
+            resultCallback({ final: result.text, interim: '' });
+          }
 
-      return startPromise.then(function () {
-        if (recognizer) {
-          sherpaStream = recognizer.createStream();
-        }
+          if (result && result.text && !speechStarted && speechStartCallback) {
+            speechStarted = true;
+            speechStartCallback();
+          }
+
+          if (isEndpoint) {
+            if (speechStarted && speechEndCallback) {
+              speechEndCallback();
+            }
+            speechStarted = false;
+            recognizer.reset(sherpaStream);
+          }
+        } catch (_) {}
+      }).then(function () {
         isListening = true;
         return { success: true };
       }).catch(function (err) {
+        if (sherpaStream) { sherpaStream.free(); sherpaStream = null; }
         if (errorCallback) errorCallback({ error: 'audio-capture', message: err.message });
         return { success: false, error: err.message };
       });

@@ -1,29 +1,27 @@
 # 语音输入法 (Voice Input Method)
 
-纯前端语音输入工具，双引擎架构——**离线可用，无需VPN**。
+纯前端语音输入工具，三引擎架构——离线、国内、在线全覆盖。
 
 ## 识别引擎
 
-| 引擎 | 类型 | 网络需求 | 状态 |
-|------|------|---------|------|
-| **sherpa-onnx** | 离线本地 | 无需网络 | 推荐（需下载模型） |
-| **Web Speech API** | 在线云端 | 需VPN（Google） | 降级方案 |
+| 引擎 | 类型 | 网络需求 | 延迟 | 状态 |
+|------|------|---------|------|------|
+| **sherpa-onnx** | 离线本地 | 无需网络 | 低 | 推荐 |
+| **百度语音** | 在线国内 | 国内直连 | 低 | 需配置API凭据 |
+| **Web Speech API** | 在线云端 | 需VPN | 中 | 降级方案 |
 
-> **离线引擎**：基于 sherpa-onnx WASM，中文+英文双语 Zipformer 模型，纯本地运算。
-> **在线引擎**：浏览器内置 Web Speech API，识别效果好但需连接 Google 服务器。
->
-> 点击引擎徽章可在两个引擎间切换。
+> 优先级：离线 > 百度API > 在线。点击引擎徽章可手动切换。
 
 ## 功能
 
-- **双引擎语音识别**：离线优先，在线兜底，一键切换
+- **三引擎语音识别**：离线优先，国内直连兜底，在线备选
+- **实时流式识别**：sherpa-onnx Zipformer 模型，中英双语
+- **端点检测**：内置 VAD/Endpoint，自动断句
 - **实时音频可视化**：7段波形动画，speech/sound 状态区分
-- **连续语音转文字**：interim（临时）蓝色斜体预览 + final（最终）黑色文本
-- **多语言**：中文普通话、粤语、英文、日文、韩文（在线引擎）
-- **可编辑文本区**：支持手动修正识别结果
-- **撤销**：Ctrl+Z 撤销识别内容（最多30步）
+- **多语言**：中文普通话、粤语、英文、日文、韩文等
 - **标点快捷栏**：11个常用标点一键插入
 - **键盘快捷键**：Space 录音、Ctrl+Z 撤销、Ctrl+C 复制、Ctrl+S 导出
+- **撤销历史**：最多30步撤销
 - **自动保存**：草稿自动保存到 localStorage，刷新不丢失
 - **历史记录**：转录历史，点击回填，单条删除
 - **主题切换**：深色/浅色，跟随系统或手动切换
@@ -37,12 +35,14 @@ voice-input-method/
 ├── css/
 │   └── style.css               # 样式与主题
 ├── js/
-│   ├── app.js                  # 应用入口，双引擎编排
+│   ├── app.js                  # 应用入口，三引擎编排
 │   ├── sherpaEngine.js         # sherpa-onnx 离线引擎封装
-│   ├── speechRecognizer.js     # Web Speech API 引擎封装
-│   ├── textProcessor.js        # 文本处理（标点/复制/导出）
-│   ├── storage.js              # 历史记录持久化
-│   └── ui.js                   # DOM交互与UI控制
+│   ├── baiduEngine.js          # 百度 WebSocket ASR 引擎
+│   └── sherpa/                 # 离线模型与WASM（需下载）
+│       ├── sherpa-onnx-asr.js
+│       ├── sherpa-onnx-wasm-main-asr.js
+│       ├── sherpa-onnx-wasm-main-asr.wasm
+│       └── sherpa-onnx-wasm-main-asr.data  (gitignored, 需下载)
 ├── scripts/
 │   └── download-sherpa-models.sh  # 离线模型下载脚本
 └── .gitignore
@@ -50,27 +50,23 @@ voice-input-method/
 
 ## 快速开始
 
-### 在线模式（无需额外配置）
-
-1. Chrome 浏览器打开 `index.html`
-2. 开启 VPN（Web Speech API 需连接 Google）
-3. 点击麦克风开始使用
-
-### 离线模式（推荐，无需VPN）
+### 1. 下载离线模型（推荐，一次性）
 
 ```bash
-# 下载离线模型（需VPN仅此一次）
 bash scripts/download-sherpa-models.sh
-
-# 下载完成后即可离线使用
-# 双击 index.html 打开
 ```
 
-离线模型文件下载后放置在 `js/sherpa/model/` 目录：
-- `encoder.onnx` (~70MB)
-- `decoder.onnx` (~5MB)
-- `joiner.onnx` (~3MB)
-- `tokens.txt`
+下载完成后将 `sherpa-onnx-wasm-main-asr.data` (约190MB) 放入 `js/sherpa/` 目录。
+
+### 2. 打开应用
+
+双击 `index.html` 或通过任意 HTTP 服务器打开。
+
+### 3. 配置百度引擎（可选）
+
+1. 在 [百度智能云](https://console.bce.baidu.com/) 注册应用
+2. 获取 API Key、Secret Key、App ID
+3. 填入 `js/baiduEngine.js` 的 `BAIDU_CONFIG`
 
 ## 快捷键
 

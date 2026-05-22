@@ -404,7 +404,8 @@
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
       var webspeech = new SpeechRecognizer();
 
-      if (sherpa && sherpa.isSupported) {
+      // Sherpa 引擎懒加载（isSupported 初始为 false，需异步加载 WASM）
+      if (sherpa) {
         engines.sherpa = sherpa;
       }
       if (baidu && baidu.isConfigured) {

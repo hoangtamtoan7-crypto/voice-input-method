@@ -11,3 +11,6 @@ desktop.ini
 
 # 项目
 *.zip
+
+# sherpa-onnx 模型数据过大 (>100MB)，需单独下载
+js/sherpa/sherpa-onnx-wasm-main-asr.data
