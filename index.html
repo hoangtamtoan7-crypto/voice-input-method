@@ -174,5 +174,22 @@
   <script src="js/sherpaEngine.js"></script>
   <script src="js/baiduEngine.js"></script>
   <script src="js/app.js"></script>
+  <!-- 诊断面板 -->
+  <div id="debugPanel" style="position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#0f0;font:11px/1.4 monospace;padding:8px 12px;z-index:99999;max-height:120px;overflow-y:auto;border-top:2px solid #333;"></div>
+  <script>
+    (function() {
+      var d = document.getElementById('debugPanel');
+      function log(msg) { d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight; }
+      log('协议: ' + window.location.protocol);
+      log('SherpaEngine: ' + (typeof SherpaEngine !== 'undefined' ? '已加载' : '未加载'));
+      log('BaiduEngine: ' + (typeof BaiduEngine !== 'undefined' ? '已加载' : '未加载'));
+      if (typeof BaiduEngine !== 'undefined') {
+        try { var b = new BaiduEngine(); log('百度 isConfigured: ' + b.isConfigured); } catch(e) { log('百度 ERROR: ' + e.message); }
+      }
+      window.onerror = function(msg, src, line) {
+        log('JS错误: ' + msg + ' @ ' + (src||'').slice(-30) + ':' + line);
+      };
+    })();
+  </script>
 </body>
 </html>
