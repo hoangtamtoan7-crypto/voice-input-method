@@ -380,13 +380,18 @@
 
   // ==================== VoiceInputApp ====================
   function VoiceInputApp() {
-    var recognizer = new SpeechRecognizer();
     var storage = new HistoryStorage();
     var ui = new UIController();
     var els = ui.getEls();
 
+    // --- 多引擎支持 ---
+    var engines = {};         // { 'sherpa': SherpaEngine, 'webspeech': SpeechRecognizer }
+    var activeEngine = null;  // 当前使用的引擎
+    var activeEngineName = ''; // 'sherpa' | 'webspeech'
+    var recognizer = null;    // 当前活跃的识别器引用（兼容旧代码）
+
     var finalText = '';
-    var undoStack = [];   // array of previous finalText states
+    var undoStack = [];
     var maxUndo = 30;
     var autoRestart = true;
     var draftSaveTimer = null;
@@ -394,13 +399,34 @@
     init();
 
     function init() {
-      if (!recognizer.isSupported) {
-        ui.setStatus('error', '浏览器不支持');
+      // 检测可用引擎
+      var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
+      var webspeech = new SpeechRecognizer();
+
+      if (sherpa && sherpa.isSupported) {
+        engines.sherpa = sherpa;
+      }
+      if (webspeech.isSupported) {
+        engines.webspeech = webspeech;
+      }
+
+      // 选择引擎：优先离线引擎（无需VPN）
+      if (engines.sherpa) {
+        setEngine('sherpa');
+      } else if (engines.webspeech) {
+        setEngine('webspeech');
+      } else {
+        // 两个引擎都不可用
+        ui.setStatus('error', '无可用引擎');
         els.recordBtn.disabled = true;
-        els.recordHint.textContent = '请使用 Chrome 或 Edge 浏览器';
-        ui.showToast('当前浏览器不支持语音识别，请使用 Chrome 或 Edge', 4000, true);
+        els.recordHint.textContent = '语音识别不可用——请安装离线模型或使用Chrome';
+        ui.showToast('请使用Chrome浏览器或安装离线语音模型', 5000, true);
+        updateEngineBadge();
         return;
       }
+
+      setupRecognizerCallbacks();
+      bindEngineSwitch();
 
       // Load draft
       var draft = localStorage.getItem('voice_input_draft');
@@ -413,10 +439,68 @@
 
       recognizer.language = ui.getLanguage();
       ui.renderHistory(storage.getAll(), function (id) { deleteHistory(id); });
-      setupRecognizerCallbacks();
       bindEvents();
-      // remove readonly - user can edit
       ui.setEditable(true);
+      updateEngineBadge();
+    }
+
+    function setEngine(name) {
+      if (activeEngineName === name) return;
+      var wasListening = recognizer && recognizer.isListening;
+      if (wasListening) recognizer.stop();
+
+      activeEngineName = name;
+      recognizer = engines[name];
+      activeEngine = engines[name];
+
+      if (wasListening) {
+        // 切换引擎后自动恢复录音
+        setTimeout(function () {
+          var result = recognizer.start();
+          if (result.success || (result.then && result.then(function(r) { return r.success; }))) {
+            ui.setRecordingState(true);
+            ui.setStatus('listening', '录音中');
+            ui.startTimer();
+          }
+        }, 300);
+      }
+      updateEngineBadge();
+    }
+
+    function bindEngineSwitch() {
+      // 点击引擎徽章切换引擎
+      if (els.engineBadge) {
+        els.engineBadge.addEventListener('click', function () {
+          var engineNames = Object.keys(engines);
+          if (engineNames.length < 2) {
+            ui.showToast('只有一个可用引擎', 1500);
+            return;
+          }
+          var currentIdx = engineNames.indexOf(activeEngineName);
+          var nextName = engineNames[(currentIdx + 1) % engineNames.length];
+          setEngine(nextName);
+          setupRecognizerCallbacks();
+          ui.showToast('已切换到' + (nextName === 'sherpa' ? '离线引擎 (sherpa-onnx)' : '在线引擎 (Web Speech)'), 2000);
+        });
+      }
+    }
+
+    function updateEngineBadge() {
+      if (!els.engineBadge) return;
+      var badge = els.engineBadge;
+      badge.className = 'engine-badge';
+      if (activeEngineName === 'sherpa') {
+        badge.textContent = '离线引擎';
+        badge.title = 'sherpa-onnx 本地识别，无需网络';
+      } else if (activeEngineName === 'webspeech') {
+        badge.textContent = '在线引擎';
+        badge.classList.add('online');
+        badge.title = 'Web Speech API，需VPN连接Google服务器';
+      } else if (Object.keys(engines).length === 0) {
+        badge.textContent = '无可用引擎';
+        badge.classList.add('unavailable');
+        badge.title = '请安装离线模型或使用Chrome浏览器';
+      }
     }
 
     function pushUndo(text) {
@@ -553,86 +637,120 @@
     }
 
     function setupRecognizerCallbacks() {
-      // Audio / speech events
-      recognizer.onAudioStart = function () { ui.setAudioActive(true); };
-      recognizer.onSoundStart = function () { ui.setSpeechActive(true); };
-      recognizer.onSpeechStart = function () { ui.setStatus('speech', '检测到语音'); };
-      recognizer.onSpeechEnd   = function () { ui.setStatus('listening', '聆听中...'); ui.setSpeechActive(false); };
-      recognizer.onSoundEnd    = function () { ui.setSpeechActive(false); };
-      recognizer.onAudioEnd    = function () { ui.setAudioActive(false); };
-      recognizer.onNoMatch     = function () { /* no match - can happen, ignore */ };
+      var self = this;
+      // Reset old engine callbacks
+      if (activeEngine) {
+        setupResultsAndErrors();
+        setupSpeechEvents();
+      }
 
-      // Results
-      recognizer.onResult = function (result) {
-        if (result.final) {
-          var lang = ui.getLanguage();
-          finalText += TextProcessor.fixPunctuation(result.final, lang);
-          pushUndo(finalText);
-          saveDraft();
-        }
-        ui.updateText(finalText, result.interim);
-      };
-
-      // Errors
-      recognizer.onError = function (err) {
-        ui.setRecordingState(false);
-        ui.stopTimer();
-        ui.setStatus('ready', '就绪');
-        var messages = {
-          'not-allowed': '麦克风权限被拒绝，请在浏览器设置中允许',
-          'no-speech': '未检测到语音，请检查麦克风',
-          'audio-capture': '未找到麦克风设备',
-          'network': '网络连接异常，语音识别需要联网',
-          'aborted': '录音被中断',
-          'language-not-supported': '当前语言不支持，请切换语言',
-          'service-not-allowed': '语音服务不可用',
-          'bad-grammar': '语法配置错误'
+      function setupResultsAndErrors() {
+        // Results
+        recognizer.onResult = function (result) {
+          if (result.final) {
+            var lang = ui.getLanguage();
+            finalText += TextProcessor.fixPunctuation(result.final, lang);
+            pushUndo(finalText);
+            saveDraft();
+          }
+          ui.updateText(finalText, result.interim);
         };
-        var msg = messages[err.error] || '识别错误: ' + (err.message || err.error);
-        ui.showToast(msg, 3500, true);
-      };
 
-      // End
-      recognizer.onEnd = function (info) {
-        ui.setRecordingState(false);
-        ui.stopTimer();
-        ui.setStatus('ready', '就绪');
+        // Errors
+        recognizer.onError = function (err) {
+          ui.setRecordingState(false);
+          ui.stopTimer();
+          ui.setStatus('ready', '就绪');
+          var messages = {
+            'not-allowed': '麦克风权限被拒绝，请在浏览器设置中允许',
+            'no-speech': '未检测到语音，请检查麦克风',
+            'audio-capture': '未找到麦克风设备',
+            'network': '网络连接异常，语音识别需要联网',
+            'aborted': '录音被中断',
+            'language-not-supported': '当前语言不支持，请切换语言',
+            'service-not-allowed': '语音服务不可用',
+            'bad-grammar': '语法配置错误',
+            'engine-not-ready': (activeEngine.getInitError ? activeEngine.getInitError() : '引擎未就绪')
+          };
+          var msg = messages[err.error] || '识别错误: ' + (err.message || err.error);
+          ui.showToast(msg, 3500, true);
+        };
 
-        // Save to history
-        if (finalText.trim()) {
-          storage.add(finalText);
-          ui.renderHistory(storage.getAll(), function (id) { deleteHistory(id); });
-        }
+        // End
+        recognizer.onEnd = function (info) {
+          ui.setRecordingState(false);
+          ui.stopTimer();
+          ui.setStatus('ready', '就绪');
 
-        // Auto-restart if not intentionally stopped
-        if (autoRestart && !info.intentional && finalText.length > 0) {
-          setTimeout(function () {
-            if (!recognizer.isListening) {
-              var r = recognizer.start();
-              if (r.success) {
-                ui.setRecordingState(true);
-                ui.setStatus('listening', '录音中(自动恢复)');
-                ui.startTimer();
+          if (finalText.trim()) {
+            storage.add(finalText);
+            ui.renderHistory(storage.getAll(), function (id) { deleteHistory(id); });
+          }
+
+          // Auto-restart (only for online engines that might time out)
+          if (autoRestart && info && !info.intentional && activeEngineName === 'webspeech' && finalText.length > 0) {
+            setTimeout(function () {
+              if (!recognizer.isListening) {
+                var r = recognizer.start();
+                if (r.success) {
+                  ui.setRecordingState(true);
+                  ui.setStatus('listening', '录音中(自动恢复)');
+                  ui.startTimer();
+                }
               }
-            }
-          }, 300);
+            }, 300);
+          }
+        };
+      }
+
+      function setupSpeechEvents() {
+        // sherpa-onnx 和 Web Speech 都支持这些事件
+        if (recognizer.onSpeechStart) {
+          recognizer.onSpeechStart = function () { ui.setStatus('speech', '检测到语音'); ui.setSpeechActive(true); };
         }
-      };
+        if (recognizer.onSpeechEnd) {
+          recognizer.onSpeechEnd = function () { ui.setStatus('listening', '聆听中...'); ui.setSpeechActive(false); };
+        }
+        if (recognizer.onAudioStart) {
+          recognizer.onAudioStart = function () { ui.setAudioActive(true); };
+        }
+        if (recognizer.onAudioEnd) {
+          recognizer.onAudioEnd = function () { ui.setAudioActive(false); };
+        }
+        if (recognizer.onSoundStart) {
+          recognizer.onSoundStart = function () { ui.setSpeechActive(true); };
+        }
+        if (recognizer.onSoundEnd) {
+          recognizer.onSoundEnd = function () { ui.setSpeechActive(false); };
+        }
+      }
     }
 
     function toggleRecording() {
       if (recognizer.isListening) {
-        autoRestart = false; // user intentionally stopped
+        autoRestart = false;
         recognizer.stop();
       } else {
         autoRestart = true;
         var result = recognizer.start();
-        if (result.success) {
-          ui.setRecordingState(true);
-          ui.setStatus('listening', '录音中');
-          ui.startTimer();
+
+        // 处理同步和异步（Promise）两种返回
+        function handleStart(r) {
+          if (r.success) {
+            ui.setRecordingState(true);
+            ui.setStatus('listening', '录音中');
+            ui.startTimer();
+          } else {
+            ui.showToast(r.error, 3000, true);
+          }
+        }
+
+        if (result && result.then) {
+          result.then(handleStart).catch(function (err) {
+            ui.showToast(err.message || '启动失败', 3000, true);
+          });
         } else {
-          ui.showToast(result.error, 3000, true);
+          handleStart(result);
         }
       }
     }

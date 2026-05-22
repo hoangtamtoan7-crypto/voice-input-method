@@ -103,6 +103,11 @@ body {
 .status-indicator.disabled .status-dot { background: var(--color-text-tertiary); }
 .status-text { font-size: 0.8rem; color: var(--color-text-secondary); font-weight: 500; }
 .status-time { font-size: 0.8rem; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; }
+.engine-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all var(--transition); user-select: none; }
+.engine-badge:hover { background: var(--color-primary); color: #fff; }
+.engine-badge.online { background: rgba(255,159,28,0.15); color: var(--color-warning); }
+.engine-badge.online:hover { background: var(--color-warning); color: #fff; }
+.engine-badge.unavailable { background: rgba(230,57,70,0.08); color: var(--color-danger); text-decoration: line-through; }
 
 /* Audio Visualizer */
 .audio-visualizer { display: flex; align-items: center; gap: 3px; height: 28px; opacity: 0.4; transition: opacity 0.3s; }
