@@ -179,7 +179,8 @@
   <script>
     (function() {
       var d = document.getElementById('debugPanel');
-      function log(msg) { d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight; }
+      window._debugLog = function(msg) { d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight; };
+      function log(msg) { window._debugLog(msg); }
       log('协议: ' + window.location.protocol);
       log('SherpaEngine: ' + (typeof SherpaEngine !== 'undefined' ? '已加载' : '未加载'));
       log('BaiduEngine: ' + (typeof BaiduEngine !== 'undefined' ? '已加载' : '未加载'));

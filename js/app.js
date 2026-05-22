@@ -399,28 +399,37 @@
     init();
 
     function init() {
+      var dbg = window._debugLog || function(){};
+      dbg('--- app init 开始 ---');
       // 检测可用引擎
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
       var webspeech = new SpeechRecognizer();
+      dbg('引擎: sherpa=' + !!sherpa + ' baidu=' + !!baidu + ' webspeech=' + webspeech.isSupported);
 
       if (sherpa) {
         engines.sherpa = sherpa;
       }
       if (baidu && baidu.isConfigured) {
         engines.baidu = baidu;
+        dbg('百度引擎已添加, isConfigured=true');
+      } else {
+        dbg('百度引擎未添加: baidu=' + !!baidu + ' isConfigured=' + (baidu ? baidu.isConfigured : 'N/A'));
       }
       if (webspeech.isSupported) {
         engines.webspeech = webspeech;
       }
 
       // 选择引擎：百度已配置 > 离线 > 在线
-      // （百度引擎即连即用，离线引擎需加载 190MB 模型，仅在百度未配置时启用）
+      dbg('引擎列表: ' + Object.keys(engines).join(', '));
       if (engines.baidu) {
+        dbg('→ 选择百度引擎');
         setEngine('baidu');
       } else if (engines.sherpa) {
+        dbg('→ 选择离线引擎');
         setEngine('sherpa');
       } else if (engines.webspeech) {
+        dbg('→ 选择在线引擎');
         setEngine('webspeech');
       } else {
         // 两个引擎都不可用
@@ -452,6 +461,8 @@
     }
 
     function setEngine(name) {
+      var dbg = window._debugLog || function(){};
+      dbg('setEngine: ' + name + ' (当前: ' + activeEngineName + ')');
       if (activeEngineName === name) return;
       var wasListening = recognizer && recognizer.isListening;
       if (wasListening) recognizer.stop();
@@ -459,6 +470,7 @@
       activeEngineName = name;
       recognizer = engines[name];
       activeEngine = engines[name];
+      dbg('setEngine 完成: activeEngineName=' + activeEngineName);
 
       if (wasListening) {
         // 切换引擎后自动恢复录音
