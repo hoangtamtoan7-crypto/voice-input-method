@@ -8,82 +8,140 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- 头部 -->
     <header class="app-header">
-      <h1 class="app-title">语音输入法</h1>
-      <button class="btn-icon theme-toggle" id="themeToggle" title="切换主题" aria-label="切换深色/浅色主题">
-        <svg class="icon icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        <svg class="icon icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-      </button>
+      <h1 class="app-title">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        语音输入法
+      </h1>
+      <div class="header-actions">
+        <button class="btn-icon tips-btn" id="tipsBtn" title="快捷键" aria-label="查看快捷键">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+        <button class="btn-icon theme-toggle" id="themeToggle" title="切换主题" aria-label="切换深色/浅色主题">
+          <svg class="icon icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
     </header>
 
-    <!-- 主内容区 -->
     <main class="app-main">
-      <!-- 录音按钮区域 -->
+      <!-- 录音区域 -->
       <section class="record-section">
-        <div class="status-indicator" id="statusIndicator">
-          <span class="status-dot"></span>
-          <span class="status-text" id="statusText">就绪</span>
+        <!-- 状态指示器 -->
+        <div class="status-bar">
+          <div class="status-indicator" id="statusIndicator">
+            <span class="status-dot"></span>
+            <span class="status-text" id="statusText">就绪</span>
+          </div>
+          <span class="status-time" id="statusTime"></span>
         </div>
+
+        <!-- 音频可视化 -->
+        <div class="audio-visualizer" id="audioVisualizer">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span>
+        </div>
+
+        <!-- 录音按钮 -->
         <button class="record-btn" id="recordBtn" aria-label="开始录音">
           <svg class="mic-icon" viewBox="0 0 24 24">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
           </svg>
+          <span class="record-ring"></span>
         </button>
-        <p class="record-hint" id="recordHint">点击麦克风开始录音</p>
+
+        <p class="record-hint" id="recordHint">
+          <kbd>Space</kbd> 开始录音
+        </p>
       </section>
 
-      <!-- 控制栏 -->
-      <section class="controls-bar">
-        <div class="lang-selector">
-          <label for="langSelect" class="sr-only">选择语言</label>
+      <!-- 工具栏 -->
+      <section class="toolbar">
+        <div class="toolbar-left">
           <select id="langSelect" class="lang-select">
-            <option value="zh-CN">中文（普通话）</option>
-            <option value="cmn-Hans-CN">中文（普通话-简化字）</option>
-            <option value="yue-Hant-HK">粤语（香港）</option>
-            <option value="en-US">English (US)</option>
-            <option value="ja-JP">日本語</option>
-            <option value="ko-KR">한국어</option>
+            <optgroup label="中文">
+              <option value="zh-CN">中文（普通话）</option>
+              <option value="cmn-Hans-CN">普通话（简体）</option>
+              <option value="yue-Hant-HK">粤语（香港）</option>
+              <option value="nan-TW">台语（台湾）</option>
+            </optgroup>
+            <optgroup label="其他语言">
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="ja-JP">日本語</option>
+              <option value="ko-KR">한국어</option>
+              <option value="fr-FR">Français</option>
+              <option value="de-DE">Deutsch</option>
+              <option value="es-ES">Español</option>
+              <option value="pt-BR">Português (BR)</option>
+            </optgroup>
           </select>
         </div>
-        <div class="action-buttons">
-          <button class="btn btn-secondary" id="copyBtn" disabled title="复制全部文本">
-            <svg class="btn-icon-svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            复制
+        <div class="toolbar-right">
+          <button class="btn btn-sm" id="undoBtn" disabled title="撤销 (Ctrl+Z)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           </button>
-          <button class="btn btn-secondary" id="clearBtn" disabled title="清空文本">
-            <svg class="btn-icon-svg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            清空
+          <button class="btn btn-sm" id="copyBtn" disabled title="复制 (Ctrl+C)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          <button class="btn btn-secondary" id="exportBtn" disabled title="导出为TXT文件">
-            <svg class="btn-icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            导出
+          <button class="btn btn-sm" id="exportBtn" disabled title="导出 (Ctrl+S)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <span class="toolbar-divider"></span>
+          <button class="btn btn-sm btn-danger" id="clearBtn" disabled title="清空 (Ctrl+Delete)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         </div>
       </section>
 
-      <!-- 文本显示区域 -->
+      <!-- 标点快捷栏 -->
+      <section class="punct-bar" id="punctBar">
+        <button class="punct-btn" data-punct="。" title="句号">。</button>
+        <button class="punct-btn" data-punct="，" title="逗号">，</button>
+        <button class="punct-btn" data-punct="？" title="问号">？</button>
+        <button class="punct-btn" data-punct="！" title="感叹号">！</button>
+        <button class="punct-btn" data-punct="；" title="分号">；</button>
+        <button class="punct-btn" data-punct="：" title="冒号">：</button>
+        <button class="punct-btn" data-punct="、" title="顿号">、</button>
+        <button class="punct-btn" data-punct="……" title="省略号">……</button>
+        <button class="punct-btn" data-punct="(" title="左括号">（</button>
+        <button class="punct-btn" data-punct=")" title="右括号">）</button>
+        <button class="punct-btn" data-punct="\n" title="换行">↵</button>
+      </section>
+
+      <!-- 文本编辑区 -->
       <section class="text-section">
         <div class="text-area-wrapper">
+          <div class="interim-preview" id="interimPreview"></div>
           <textarea
             id="textOutput"
             class="text-output"
-            placeholder="语音识别结果将显示在这里..."
-            readonly
-            aria-label="语音识别结果"
+            placeholder="点击麦克风或按 Space 开始语音输入..."
+            aria-label="文本编辑区"
           ></textarea>
-          <div class="text-charcount" id="charCount">0 字</div>
+        </div>
+        <div class="text-stats" id="textStats">
+          <span class="stat-item"><span id="charCount">0</span> 字</span>
+          <span class="stat-divider">|</span>
+          <span class="stat-item"><span id="wordCount">0</span> 词</span>
+          <span class="stat-divider">|</span>
+          <span class="stat-item">约 <span id="readTime">0</span> 秒阅读</span>
         </div>
       </section>
 
       <!-- 历史记录 -->
       <section class="history-section">
-        <details class="history-details">
+        <details class="history-details" id="historyDetails">
           <summary class="history-summary">
-            <svg class="btn-icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            历史记录
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>历史记录</span>
+            <span class="history-count" id="historyCount">0条</span>
           </summary>
+          <div class="history-actions">
+            <button class="btn btn-sm" id="clearHistoryBtn">清空历史</button>
+          </div>
           <ul class="history-list" id="historyList">
             <li class="history-empty">暂无历史记录</li>
           </ul>
@@ -91,10 +149,25 @@
       </section>
     </main>
 
-    <!-- 页脚 -->
     <footer class="app-footer">
       <p>基于 Web Speech API 构建 | 七牛云 XEngineer 实训营</p>
     </footer>
+  </div>
+
+  <!-- 快捷键提示弹窗 -->
+  <div class="modal-overlay" id="tipsModal">
+    <div class="modal-content">
+      <h3>快捷键</h3>
+      <ul class="shortcut-list">
+        <li><kbd>Space</kbd> 开始/停止录音</li>
+        <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> 撤销最后识别内容</li>
+        <li><kbd>Ctrl</kbd> + <kbd>C</kbd> 复制全部文本</li>
+        <li><kbd>Ctrl</kbd> + <kbd>S</kbd> 导出TXT</li>
+        <li><kbd>Ctrl</kbd> + <kbd>Delete</kbd> 清空文本</li>
+        <li><kbd>Esc</kbd> 关闭弹窗</li>
+      </ul>
+      <button class="btn" id="tipsCloseBtn">知道了</button>
+    </div>
   </div>
 
   <script src="js/app.js"></script>
