@@ -423,14 +423,14 @@
         engines.webspeech = webspeech;
       }
 
-      // 选择引擎：百度已配置 > 离线 > 在线
+      // 选择引擎：离线 > 百度 > 在线
       dbg('引擎列表: ' + Object.keys(engines).join(', '));
-      if (engines.baidu) {
-        dbg('→ 选择百度引擎');
-        setEngine('baidu');
-      } else if (engines.sherpa) {
+      if (engines.sherpa) {
         dbg('→ 选择离线引擎');
         setEngine('sherpa');
+      } else if (engines.baidu) {
+        dbg('→ 选择百度引擎');
+        setEngine('baidu');
       } else if (engines.webspeech) {
         dbg('→ 选择在线引擎');
         setEngine('webspeech');
