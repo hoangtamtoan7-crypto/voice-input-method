@@ -41,6 +41,7 @@ var BaiduEngine = (function () {
       var AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return Promise.reject(new Error('浏览器不支持AudioContext'));
       audioContext = new AudioContextClass({ sampleRate: sampleRate });
+      if (audioContext.state === 'suspended') audioContext.resume();
 
       return navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: sampleRate, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
@@ -151,21 +152,27 @@ var BaiduEngine = (function () {
         if (isListening) return { success: false, error: '已经在录音中' };
         if (!isConfigured()) return { success: false, error: '百度API未配置，请在 js/baiduEngine.js 中填入 appid/appkey' };
 
+        var dbg = window._debugLog || function(){};
         sn = getSn();
         var url = BAIDU_CONFIG.wsUrl + '?sn=' + sn;
+        dbg('[百度] 连接: ' + url);
 
         try {
           ws = new WebSocket(url);
         } catch (e) {
+          dbg('[百度] WebSocket创建失败: ' + e.message);
           return { success: false, error: 'WebSocket连接失败: ' + e.message };
         }
 
         ws.binaryType = 'arraybuffer';
-        var self = this;
-        var connected = false;
+        var wsOpened = false;
+        var totalBytesSent = 0;
+        var resultCount = 0;
+        var audioBuffer = []; // 缓存 WebSocket 未打开前的音频数据
 
         ws.onopen = function () {
-          // 发送 START 帧
+          wsOpened = true;
+          dbg('[百度] WebSocket 已连接，发送 START 帧');
           ws.send(JSON.stringify({
             type: 'START',
             data: {
@@ -177,6 +184,14 @@ var BaiduEngine = (function () {
               sample: 16000
             }
           }));
+          // 发送缓存的音频
+          if (audioBuffer.length > 0) {
+            dbg('[百度] 发送缓存音频: ' + audioBuffer.length + ' 块');
+            for (var i = 0; i < audioBuffer.length; i++) {
+              if (ws.readyState === WebSocket.OPEN) ws.send(audioBuffer[i]);
+            }
+            audioBuffer = [];
+          }
         };
 
         var speechStarted = false;
@@ -187,45 +202,58 @@ var BaiduEngine = (function () {
           } catch (_) { return; }
 
           if (msg.err_no !== 0 && msg.err_no !== undefined) {
+            dbg('[百度] API错误: err_no=' + msg.err_no + ' msg=' + msg.err_msg);
             if (errorCallback) errorCallback({ error: 'baidu-api', message: msg.err_msg || '百度API错误 ' + msg.err_no });
             return;
           }
 
           if (msg.type === 'MID_TEXT') {
+            resultCount++;
             if (!speechStarted && speechStartCallback) { speechStarted = true; speechStartCallback(); }
             if (resultCallback) resultCallback({ final: '', interim: msg.result || '' });
           } else if (msg.type === 'FIN_TEXT') {
+            resultCount++;
+            dbg('[百度] 识别结果(' + resultCount + '): ' + (msg.result || '').slice(0, 40));
             if (speechStarted && speechEndCallback) { speechEndCallback(); speechStarted = false; }
             if (resultCallback) resultCallback({ final: msg.result || '', interim: '' });
           }
         };
 
         ws.onerror = function (e) {
+          dbg('[百度] WebSocket error');
           if (errorCallback) errorCallback({ error: 'network', message: '百度服务连接失败' });
         };
 
-        ws.onclose = function () {
+        ws.onclose = function (e) {
+          dbg('[百度] WebSocket 关闭 code=' + e.code + ' sent=' + totalBytesSent + ' bytes results=' + resultCount);
           isListening = false;
           audioCapture.stop();
+          audioBuffer = [];
           if (endCallback) endCallback();
         };
 
         // 开始音频捕获
         return audioCapture.start(function (samples) {
-          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!ws) return;
           var int16Data = float32ToInt16(samples);
-          var chunkSize = 2560; // ~80ms per chunk (16000 * 0.08 * 2 bytes)
+          var chunkSize = 2560;
           for (var offset = 0; offset < int16Data.length; offset += chunkSize) {
             var chunk = int16Data.slice(offset, offset + chunkSize);
+            var buf = chunk.buffer.slice(0); // 复制 ArrayBuffer
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(chunk.buffer);
+              ws.send(buf);
+              totalBytesSent += buf.byteLength;
+            } else if (!wsOpened) {
+              // WebSocket 尚未打开，缓存数据
+              audioBuffer.push(buf);
             }
           }
         }).then(function () {
           isListening = true;
-          connected = true;
+          dbg('[百度] 音频捕获开始, wsOpen=' + wsOpened + ' buffered=' + audioBuffer.length);
           return { success: true };
         }).catch(function (err) {
+          dbg('[百度] 音频捕获失败: ' + err.message);
           if (ws) { ws.close(); ws = null; }
           return { success: false, error: err.message };
         });

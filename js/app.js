@@ -680,7 +680,9 @@
       function setupResultsAndErrors() {
         // Results
         recognizer.onResult = function (result) {
+          var dbg = window._debugLog || function(){};
           if (result.final) {
+            dbg('[app] 识别结果: ' + result.final.slice(0, 50));
             var lang = ui.getLanguage();
             finalText += TextProcessor.fixPunctuation(result.final, lang);
             pushUndo(finalText);
@@ -691,6 +693,8 @@
 
         // Errors
         recognizer.onError = function (err) {
+          var dbg = window._debugLog || function(){};
+          dbg('[app] 错误: ' + err.error + ' - ' + (err.message || ''));
           ui.setRecordingState(false);
           ui.stopTimer();
           ui.setStatus('ready', '就绪');
@@ -711,6 +715,8 @@
 
         // End
         recognizer.onEnd = function (info) {
+          var dbg = window._debugLog || function(){};
+          dbg('[app] 录音结束, intentional=' + (info ? !info.intentional : 'N/A') + ' finalText长度=' + finalText.length);
           ui.setRecordingState(false);
           ui.stopTimer();
           ui.setStatus('ready', '就绪');
@@ -761,31 +767,39 @@
     }
 
     function toggleRecording() {
+      var dbg = window._debugLog || function(){};
       if (recognizer.isListening) {
+        dbg('[app] 手动停止录音');
         autoRestart = false;
         autoRestartCount = 0;
         recognizer.stop();
       } else {
-        if (isStarting) return; // 防止双击竞态
+        if (isStarting) { dbg('[app] 阻止双击'); return; }
         isStarting = true;
         autoRestart = true;
         autoRestartCount = 0;
+        dbg('[app] 开始录音, 引擎=' + activeEngineName);
+        // 录音时自动显示调试面板
+        var dp = document.getElementById('debugPanel');
+        if (dp && dp.style.display === 'none') dp.style.display = 'block';
         var result = recognizer.start();
 
         function handleStart(r) {
           isStarting = false;
-          if (r.success) {
+          dbg('[app] start 结果: success=' + (r && r.success) + (r && r.error ? ' error=' + r.error : ''));
+          if (r && r.success) {
             ui.setRecordingState(true);
             ui.setStatus('listening', '录音中');
             ui.startTimer();
           } else {
-            ui.showToast(r.error, 3000, true);
+            ui.showToast(r ? r.error : '启动失败', 3000, true);
           }
         }
 
         if (result && result.then) {
           result.then(handleStart).catch(function (err) {
             isStarting = false;
+            dbg('[app] start Promise 失败: ' + (err && err.message));
             ui.showToast(err.message || '启动失败', 3000, true);
           });
         } else {

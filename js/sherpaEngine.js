@@ -26,6 +26,7 @@ var SherpaEngine = (function () {
     function init() {
       if (!AudioContextClass) return Promise.reject(new Error('浏览器不支持AudioContext'));
       audioContext = new AudioContextClass({ sampleRate: sampleRate });
+      if (audioContext.state === 'suspended') audioContext.resume();
       return navigator.mediaDevices.getUserMedia({ audio: {
         channelCount: 1,
         sampleRate: sampleRate,
