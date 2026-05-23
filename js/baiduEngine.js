@@ -255,7 +255,7 @@ var BaiduEngine = (function () {
         if (!ws) return;
         // 每 50 次(约2秒)输出一次音量
         audioLogCounter++;
-        if (audioLogCounter <= 3 || audioLogCounter % 20 === 0) {
+        if (audioLogCounter === 1) {
           var rms = 0;
           for (var j = 0; j < samples.length; j++) rms += samples[j] * samples[j];
           rms = Math.sqrt(rms / samples.length);

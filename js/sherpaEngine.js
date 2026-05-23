@@ -141,6 +141,9 @@ var SherpaEngine = (function () {
     function init() {
       if (initPromise) return initPromise;
 
+      var dbg = window._debugLog || function(){};
+      dbg('[离线] 开始初始化...');
+
       initPromise = new Promise(function (resolve) {
         var resolved = false;
         var timeoutId = null;
@@ -149,7 +152,8 @@ var SherpaEngine = (function () {
           if (resolved) return;
           resolved = true;
           if (timeoutId) clearTimeout(timeoutId);
-          if (err) initError = err;
+          if (err) { initError = err; dbg('[离线] 初始化失败: ' + err); }
+          else dbg('[离线] 初始化成功');
           resolve(ok);
         }
 
@@ -163,12 +167,12 @@ var SherpaEngine = (function () {
         var onReady = function () {
           try {
             if (typeof createOnlineRecognizer === 'undefined') {
-              finish(false, 'ASR wrapper 未加载');
+              finish(false, 'ASR wrapper 未加载(createOnlineRecognizer未定义)');
               return;
             }
             recognizer = createOnlineRecognizer(Module);
             _isSupported = true;
-            console.log('[sherpa-onnx] 离线引擎就绪');
+            dbg('[离线] createOnlineRecognizer 成功');
             finish(true);
           } catch (e) {
             finish(false, '识别器初始化失败: ' + e.message);
@@ -177,6 +181,7 @@ var SherpaEngine = (function () {
 
         // Check if WASM already initialized
         if (Module.calledRun) {
+          dbg('[离线] WASM 已初始化(复用)，直接创建识别器');
           onReady();
           return;
         }
@@ -184,9 +189,14 @@ var SherpaEngine = (function () {
         Module.onRuntimeInitialized = onReady;
 
         // Load WASM glue → ASR wrapper
+        dbg('[离线] 加载 WASM glue...');
         loadScript('js/sherpa/sherpa-onnx-wasm-main-asr.js').then(function () {
+          dbg('[离线] WASM glue 加载完成，加载 ASR wrapper...');
           return loadScript('js/sherpa/sherpa-onnx-asr.js');
+        }).then(function () {
+          dbg('[离线] ASR wrapper 加载完成，等待 WASM 初始化...');
         }).catch(function (err) {
+          dbg('[离线] 脚本加载失败: ' + err.message);
           finish(false, 'sherpa-onnx 模型未安装。请运行: bash scripts/download-sherpa-models.sh');
         });
       });

@@ -779,9 +779,7 @@
         autoRestart = true;
         autoRestartCount = 0;
         dbg('[app] 开始录音, 引擎=' + activeEngineName);
-        // 录音时自动显示调试面板
-        var dp = document.getElementById('debugPanel');
-        if (dp && dp.style.display === 'none') dp.style.display = 'block';
+        // 调试面板保持隐藏，按 Ctrl+Shift+D 查看
         var result = recognizer.start();
 
         function handleStart(r) {
