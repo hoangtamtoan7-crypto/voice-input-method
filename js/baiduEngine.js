@@ -250,8 +250,17 @@ var BaiduEngine = (function () {
       };
 
       // 开始音频捕获
+      var audioLogCounter = 0;
       return audioCapture.start(function (samples) {
         if (!ws) return;
+        // 每 50 次(约2秒)输出一次音量
+        audioLogCounter++;
+        if (audioLogCounter % 50 === 0) {
+          var rms = 0;
+          for (var j = 0; j < samples.length; j++) rms += samples[j] * samples[j];
+          rms = Math.sqrt(rms / samples.length);
+          dbg('[百度] 音频音量: ' + (rms * 100).toFixed(1) + '% (0=静音, >5%=有声)');
+        }
         var int16Data = float32ToInt16(samples);
         var chunkSize = 2560;
         for (var offset = 0; offset < int16Data.length; offset += chunkSize) {
