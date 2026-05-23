@@ -15,14 +15,14 @@ var BaiduEngine = (function () {
     appid: '123422897',       // 百度智能云 AppID
     appkey: '63jFK1A0I83WeUGQcbuOmJDY',      // 百度智能云 API Key
     secret: 'xPr3Z7v4NGNdeL3qfOOirv5JdEo3HgkM',      // 百度智能云 Secret Key
-    dev_pid: 15372,  // 识别模型: 1537=普通话(弱标点) 15372=普通话(加强标点) 1737=英语
+    dev_pid: 1537,   // 识别模型: 1537=普通话(通用) 15372=普通话(加强标点) 1737=英语
     wsUrl: 'wss://vop.baidu.com/realtime_asr'
   };
 
   // 语言 → dev_pid 映射
   var LANG_TO_PID = {
-    'zh-CN': 15372,
-    'cmn-Hans-CN': 15372,
+    'zh-CN': 1537,
+    'cmn-Hans-CN': 1537,
     'en-US': 1737,
     'yue-Hant-HK': 15376  // 多方言模型，支持粤语
   };
