@@ -12,9 +12,9 @@ var BaiduEngine = (function () {
 
   // ========== 配置（在此填入百度API凭据） ==========
   var BAIDU_CONFIG = {
-    appid: '123422897',       // 百度智能云 AppID
-    appkey: '63jFK1A0I83WeUGQcbuOmJDY',      // 百度智能云 API Key
-    secret: 'xPr3Z7v4NGNdeL3qfOOirv5JdEo3HgkM',      // 百度智能云 Secret Key
+    appid: '123427753',       // 百度智能云 AppID
+    appkey: '7XY6mrmLuUxvpEM6bhuGGF7a',      // 百度智能云 API Key
+    secret: 'AmWWRC68o1Gxz9vjtk98iKmUG0lcSr0E',      // 百度智能云 Secret Key
     dev_pid: 1537,   // 识别模型: 1537=普通话(通用) 15372=普通话(加强标点) 1737=英语
     wsUrl: 'wss://vop.baidu.com/realtime_asr'
   };
