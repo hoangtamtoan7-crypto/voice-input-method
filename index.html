@@ -174,22 +174,11 @@
   <script src="js/sherpaEngine.js"></script>
   <script src="js/baiduEngine.js"></script>
   <script src="js/app.js"></script>
-  <!-- 诊断面板（按 Ctrl+Shift+D 显示） -->
-  <div id="debugPanel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#0f0;font:11px/1.4 monospace;padding:8px 12px;z-index:99999;max-height:120px;overflow-y:auto;border-top:2px solid #333;"></div>
+  <!-- 诊断日志（浏览器控制台查看） -->
   <script>
     (function() {
-      var d = document.getElementById('debugPanel');
-      window._debugLog = function(msg) {
-        if (d.style.display === 'none') d.style.display = 'block';
-        d.innerHTML += msg + '<br>'; d.scrollTop = d.scrollHeight;
-      };
-      document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
-          d.style.display = d.style.display === 'none' ? 'block' : 'none';
-        }
-      });
-      if (window.location.protocol === 'file:') _debugLog('file:// 协议 — WASM加载可能受限');
-      if (typeof SherpaEngine === 'undefined') _debugLog('SherpaEngine 未加载');
+      window._debugLog = function(msg) { console.log(msg); };
+      if (window.location.protocol === 'file:') console.warn('file:// 协议 — 音频捕获和WASM加载受限，请使用HTTP服务器');
     })();
   </script>
 </body>

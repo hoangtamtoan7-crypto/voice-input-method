@@ -110,21 +110,18 @@ var BaiduEngine = (function () {
   function fetchToken() {
     var dbg = window._debugLog || function(){};
     if (tokenCache && Date.now() < tokenExpiry) {
-      dbg('[百度] 使用缓存的 access token');
       return Promise.resolve(tokenCache);
     }
     var url = 'https://aip.baidubce.com/oauth/2.0/token'
       + '?grant_type=client_credentials'
       + '&client_id=' + encodeURIComponent(BAIDU_CONFIG.appkey)
       + '&client_secret=' + encodeURIComponent(BAIDU_CONFIG.secret);
-    dbg('[百度] 获取 access token...');
     return fetch(url, { method: 'POST' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.access_token) {
           tokenCache = data.access_token;
           tokenExpiry = Date.now() + (data.expires_in || 2592000) * 1000 - 60000;
-          dbg('[百度] access token 已获取，有效期: ' + (data.expires_in || 2592000) + '秒');
           return tokenCache;
         }
         throw new Error(data.error_description || data.error || '获取access token失败');
@@ -161,12 +158,10 @@ var BaiduEngine = (function () {
       var dbg = window._debugLog || function(){};
       sn = getSn();
       var url = BAIDU_CONFIG.wsUrl + '?sn=' + sn;
-      dbg('[百度] 连接: ' + url);
 
       try {
         ws = new WebSocket(url);
       } catch (e) {
-        dbg('[百度] WebSocket创建失败: ' + e.message);
         return { success: false, error: 'WebSocket连接失败: ' + e.message };
       }
 
@@ -187,14 +182,11 @@ var BaiduEngine = (function () {
         };
         if (token) {
           startData.token = token;
-          dbg('[百度] WebSocket 已连接，发送 START 帧(token鉴权)');
         } else {
           startData.appkey = BAIDU_CONFIG.appkey;
-          dbg('[百度] WebSocket 已连接，发送 START 帧(appkey鉴权)');
         }
         ws.send(JSON.stringify({ type: 'START', data: startData }));
         if (audioBuffer.length > 0) {
-          dbg('[百度] 发送缓存音频: ' + audioBuffer.length + ' 块');
           for (var i = 0; i < audioBuffer.length; i++) {
             if (ws.readyState === WebSocket.OPEN) ws.send(audioBuffer[i]);
           }
@@ -205,18 +197,10 @@ var BaiduEngine = (function () {
       var speechStarted = false;
 
       ws.onmessage = function (event) {
-        var raw = '';
-        if (typeof event.data === 'string') {
-          raw = event.data;
-          try {
-            var msg = JSON.parse(event.data);
-          } catch (_) { dbg('[百度] 收到文本(非JSON): ' + event.data.slice(0, 100)); return; }
-        } else {
-          dbg('[百度] 收到二进制: ' + event.data.byteLength + ' bytes');
-          return;
-        }
-
-        dbg('[百度] 收到: ' + raw.slice(0, 200));
+        if (typeof event.data !== 'string') return;
+        try {
+          var msg = JSON.parse(event.data);
+        } catch (_) { return; }
 
         if (msg.err_no !== 0 && msg.err_no !== undefined) {
           dbg('[百度] API错误: err_no=' + msg.err_no + ' msg=' + msg.err_msg);
@@ -230,7 +214,6 @@ var BaiduEngine = (function () {
           if (resultCallback) resultCallback({ final: '', interim: msg.result || '' });
         } else if (msg.type === 'FIN_TEXT') {
           resultCount++;
-          dbg('[百度] 识别结果(' + resultCount + '): ' + (msg.result || '').slice(0, 40));
           if (speechStarted && speechEndCallback) { speechEndCallback(); speechStarted = false; }
           if (resultCallback) resultCallback({ final: msg.result || '', interim: '' });
         }
@@ -241,8 +224,7 @@ var BaiduEngine = (function () {
         if (errorCallback) errorCallback({ error: 'network', message: '百度服务连接失败' });
       };
 
-      ws.onclose = function (e) {
-        dbg('[百度] WebSocket 关闭 code=' + e.code + ' sent=' + totalBytesSent + ' bytes results=' + resultCount);
+      ws.onclose = function () {
         isListening = false;
         audioCapture.stop();
         audioBuffer = [];
@@ -250,17 +232,8 @@ var BaiduEngine = (function () {
       };
 
       // 开始音频捕获
-      var audioLogCounter = 0;
       return audioCapture.start(function (samples) {
         if (!ws) return;
-        // 每 50 次(约2秒)输出一次音量
-        audioLogCounter++;
-        if (audioLogCounter === 1) {
-          var rms = 0;
-          for (var j = 0; j < samples.length; j++) rms += samples[j] * samples[j];
-          rms = Math.sqrt(rms / samples.length);
-          dbg('[百度] 音频音量: ' + (rms * 100).toFixed(1) + '% (0=静音, >5%=有声)');
-        }
         var int16Data = float32ToInt16(samples);
         var chunkSize = 2560;
         for (var offset = 0; offset < int16Data.length; offset += chunkSize) {
@@ -275,7 +248,6 @@ var BaiduEngine = (function () {
         }
       }).then(function () {
         isListening = true;
-        dbg('[百度] 音频捕获开始, wsOpen=' + wsOpened + ' buffered=' + audioBuffer.length);
         return { success: true };
       }).catch(function (err) {
         dbg('[百度] 音频捕获失败: ' + err.message);

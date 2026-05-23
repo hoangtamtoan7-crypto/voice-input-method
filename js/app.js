@@ -402,8 +402,6 @@
     init();
 
     function init() {
-      var dbg = window._debugLog || function(){};
-      dbg('--- app init 开始 ---');
       // 检测可用引擎
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
@@ -779,7 +777,6 @@
         autoRestart = true;
         autoRestartCount = 0;
         dbg('[app] 开始录音, 引擎=' + activeEngineName);
-        // 调试面板保持隐藏，按 Ctrl+Shift+D 查看
         var result = recognizer.start();
 
         function handleStart(r) {
