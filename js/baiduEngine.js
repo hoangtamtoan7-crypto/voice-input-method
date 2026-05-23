@@ -197,9 +197,18 @@ var BaiduEngine = (function () {
         var speechStarted = false;
 
         ws.onmessage = function (event) {
-          try {
-            var msg = JSON.parse(event.data);
-          } catch (_) { return; }
+          var raw = '';
+          if (typeof event.data === 'string') {
+            raw = event.data;
+            try {
+              var msg = JSON.parse(event.data);
+            } catch (_) { dbg('[百度] 收到文本(非JSON): ' + event.data.slice(0, 100)); return; }
+          } else {
+            dbg('[百度] 收到二进制: ' + event.data.byteLength + ' bytes');
+            return;
+          }
+
+          dbg('[百度] 收到: ' + raw.slice(0, 200));
 
           if (msg.err_no !== 0 && msg.err_no !== undefined) {
             dbg('[百度] API错误: err_no=' + msg.err_no + ' msg=' + msg.err_msg);
@@ -217,6 +226,7 @@ var BaiduEngine = (function () {
             if (speechStarted && speechEndCallback) { speechEndCallback(); speechStarted = false; }
             if (resultCallback) resultCallback({ final: msg.result || '', interim: '' });
           }
+          // 注意：START 响应和 FINISH 响应也会被上面 dbg 记录
         };
 
         ws.onerror = function (e) {
