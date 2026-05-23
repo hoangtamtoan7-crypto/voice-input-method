@@ -178,18 +178,21 @@ var BaiduEngine = (function () {
 
       ws.onopen = function () {
         wsOpened = true;
-        dbg('[百度] WebSocket 已连接，发送 START 帧(token=' + token.slice(0, 12) + '...)');
-        ws.send(JSON.stringify({
-          type: 'START',
-          data: {
-            appid: parseInt(BAIDU_CONFIG.appid),
-            token: token,
-            dev_pid: currentPid,
-            cuid: 'voice-input-' + (BAIDU_CONFIG.appid),
-            format: 'pcm',
-            sample: 16000
-          }
-        }));
+        var startData = {
+          appid: parseInt(BAIDU_CONFIG.appid),
+          dev_pid: currentPid,
+          cuid: 'voice-input-' + (BAIDU_CONFIG.appid),
+          format: 'pcm',
+          sample: 16000
+        };
+        if (token) {
+          startData.token = token;
+          dbg('[百度] WebSocket 已连接，发送 START 帧(token鉴权)');
+        } else {
+          startData.appkey = BAIDU_CONFIG.appkey;
+          dbg('[百度] WebSocket 已连接，发送 START 帧(appkey鉴权)');
+        }
+        ws.send(JSON.stringify({ type: 'START', data: startData }));
         if (audioBuffer.length > 0) {
           dbg('[百度] 发送缓存音频: ' + audioBuffer.length + ' 块');
           for (var i = 0; i < audioBuffer.length; i++) {
@@ -294,15 +297,15 @@ var BaiduEngine = (function () {
 
         var dbg = window._debugLog || function(){};
 
-        // 先获取 token（若已在获取中则复用）
+        // 尝试获取 token，失败则降级为 appkey 直接鉴权
         if (!tokenPromise) tokenPromise = fetchToken();
         return tokenPromise.then(function (token) {
           tokenPromise = null;
           return doStart(token);
         }).catch(function (err) {
           tokenPromise = null;
-          dbg('[百度] Token获取失败: ' + err.message);
-          return { success: false, error: '百度鉴权失败: ' + err.message };
+          dbg('[百度] Token获取失败，降级使用 appkey 鉴权: ' + err.message);
+          return doStart(null); // null → 使用 appkey 模式
         });
       },
 
