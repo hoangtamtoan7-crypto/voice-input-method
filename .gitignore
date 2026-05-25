@@ -22,5 +22,3 @@ out/
 .electron-data/
 *.log
 
-# sherpa-onnx 离线模型 (~199MB)，超出Git托管限制，需通过脚本下载
-js/sherpa/sherpa-onnx-wasm-main-asr.data
