@@ -1,0 +1,15 @@
+{
+  "name": "voice-input-method",
+  "version": "2.0.0",
+  "description": "语音输入法 - 三引擎智能路由桌面应用 | 全局热键语音转文字，自动粘贴到任意应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "author": "七牛云 XEngineer 实训营",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.0.0"
+  }
+}

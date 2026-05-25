@@ -105,8 +105,12 @@ body {
 .status-time { font-size: 0.8rem; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; }
 .engine-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all var(--transition); user-select: none; }
 .engine-badge:hover { background: var(--color-primary); color: #fff; }
+.engine-badge.offline { background: rgba(67,97,238,0.12); color: var(--color-primary); }
+.engine-badge.offline:hover { background: var(--color-primary); color: #fff; }
 .engine-badge.baidu { background: rgba(46,196,182,0.15); color: var(--color-success); }
 .engine-badge.baidu:hover { background: var(--color-success); color: #fff; }
+.engine-badge.iflytek { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.engine-badge.iflytek:hover { background: #3b82f6; color: #fff; }
 .engine-badge.online { background: rgba(255,159,28,0.15); color: var(--color-warning); }
 .engine-badge.online:hover { background: var(--color-warning); color: #fff; }
 .engine-badge.unavailable { background: rgba(230,57,70,0.08); color: var(--color-danger); text-decoration: line-through; }
@@ -298,4 +302,118 @@ body {
   .mic-icon { width: 24px; height: 24px; }
   .punct-btn { width: 28px; height: 28px; font-size: 0.75rem; }
   .btn { padding: 5px 10px; font-size: 0.75rem; }
+}
+
+/* ========== Electron Popup Mode (Compact Recording Overlay) ========== */
+body.electron-popup {
+  background: transparent !important;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.electron-popup .app-container {
+  max-width: none;
+  padding: 14px 16px;
+  min-height: auto;
+  background: var(--color-surface);
+  border-radius: 18px;
+  margin: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08);
+  border: 1px solid var(--color-border);
+}
+
+[data-theme="dark"] body.electron-popup .app-container {
+  box-shadow: 0 10px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* Hide everything except recording core */
+body.electron-popup .app-header,
+body.electron-popup .toolbar,
+body.electron-popup .punct-bar,
+body.electron-popup .history-section,
+body.electron-popup .app-footer {
+  display: none;
+}
+
+/* Show text-section in popup but only for interim preview */
+body.electron-popup .text-section {
+  display: block;
+  flex: none;
+}
+
+body.electron-popup .text-output,
+body.electron-popup .text-stats {
+  display: none;
+}
+
+body.electron-popup .text-area-wrapper {
+  position: static;
+}
+
+body.electron-popup .app-main {
+  gap: 8px;
+  padding-top: 0;
+}
+
+body.electron-popup .record-section {
+  gap: 6px;
+}
+
+body.electron-popup .record-btn {
+  width: 60px;
+  height: 60px;
+}
+
+body.electron-popup .mic-icon {
+  width: 24px;
+  height: 24px;
+}
+
+body.electron-popup .record-hint {
+  font-size: 0.72rem;
+}
+
+body.electron-popup .audio-visualizer {
+  height: 22px;
+}
+
+/* Drag handle — status bar is the drag region */
+body.electron-popup .status-bar {
+  -webkit-app-region: drag;
+  padding: 2px 0;
+}
+
+body.electron-popup .status-indicator,
+body.electron-popup .engine-badge,
+body.electron-popup .status-time {
+  -webkit-app-region: no-drag;
+}
+
+/* Compact interim text preview */
+body.electron-popup .interim-preview {
+  position: static;
+  min-height: auto !important;
+  font-size: 0.88rem;
+  text-align: center;
+  padding: 6px 8px;
+  max-height: 56px;
+  overflow: hidden;
+  line-height: 1.4;
+  opacity: 0.8;
+  color: var(--color-interim);
+}
+
+/* Interim preview bar in popup (a compact one-liner) */
+body.electron-popup .popup-interim {
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 4px 8px;
+  min-height: 28px;
+  color: var(--color-text);
+  opacity: 0.8;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }

@@ -1,6 +1,6 @@
 # 语音输入法 (Voice Input Method)
 
-纯前端语音输入工具，三引擎智能路由架构——离线、国内直连、云端全覆盖。解决用户在无 VPN 环境下高效语音转文字的需求。
+Electron 桌面语音输入应用，三引擎智能路由架构。**全局热键唤起，语音转文字自动粘贴到任意应用**——离线、国内直连、云端全覆盖。
 
 > 七牛云 XEngineer 暑期实训营 · 题目一
 
@@ -10,23 +10,38 @@
 
 ## 解决的问题
 
+- **网页输入法无法在系统全局使用**——Electron 桌面应用 + 全局快捷键 + 自动粘贴
 - **国内用户无法使用 Google Web Speech API**（需 VPN）
 - **网络不稳定导致识别中断**——自动降级切换引擎
 - **隐私场景**需要纯本地识别，不上传音频到服务器
+
+## 使用方式
+
+```bash
+npm install   # 首次需要安装依赖（Electron 约 150MB）
+npm start     # 启动应用
+```
+
+1. 应用启动后，系统托盘出现麦克风图标
+2. 在**任意应用**（记事本、Word、微信、浏览器…）中按 `Ctrl+Shift+Space`
+3. 屏幕中央弹出录音窗口，开始说话
+4. 再按一次 `Ctrl+Shift+Space` 停止，**文字自动粘贴到光标位置**
 
 ## 功能特性
 
 | 特性 | 说明 |
 |------|------|
+| **全局热键** | Ctrl+Shift+Space 在任意应用中唤起语音输入 |
+| **自动粘贴** | 识别完成后自动粘贴到当前光标位置 |
 | **三引擎智能路由** | 离线(sherpa-onnx) → 百度实时ASR(国内直连) → Web Speech(在线降级) |
-| **一键切换引擎** | 点击状态栏引擎徽章，手动切换，录音中自动恢复 |
+| **一键切换引擎** | 托盘菜单或点击引擎徽章手动切换 |
 | **实时流式识别** | 边说边出字，支持 interim(临时) + final(最终) 结果 |
 | **端点检测** | 内置 VAD，自动断句，长句不丢失 |
 | **多语言** | 中文普通话、粤语、英语、日语、韩语等 10+ 语言 |
-| **音频可视化** | 7段波形，区分 sound/speech 状态（离线+百度引擎） |
+| **音频可视化** | 7段波形，区分 sound/speech 状态 |
 | **标点快捷栏** | 11个常用标点一键插入，支持换行 |
 | **撤销历史** | 最多30步，Ctrl+Z 撤销 |
-| **键盘快捷键** | Space 录音、Ctrl+Z 撤销、Ctrl+C 复制、Ctrl+S 导出 TXT、Ctrl+Delete 清空 |
+| **键盘快捷键** | Space 录音、Ctrl+Z 撤销、Ctrl+C 复制、Ctrl+S 导出 TXT |
 | **草稿自动保存** | localStorage 自动保存，刷新不丢失 |
 | **历史记录** | 转录历史，点击回填，单条删除 |
 | **深色/浅色主题** | 跟随系统或手动切换 |
@@ -35,17 +50,21 @@
 ## 技术架构
 
 ```
-┌─────────────────────────────────────┐
-│           VoiceInputApp             │
-│         (引擎编排 & UI管理)          │
-├─────────────────────────────────────┤
-│  SherpaEngine    BaiduEngine   Web  │
-│  (sherpa-onnx)   (百度实时ASR) Speech│
-│  WASM离线识别    WebSocket国内直连   │
-├─────────────────────────────────────┤
-│  AudioCapture  → Float32→Int16 PCM │
-│  (16kHz mono)    音频格式转换      │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│           Electron Main Process          │
+│  系统托盘 · 全局快捷键 · 窗口管理 · 自动粘贴  │
+├──────────────────────────────────────────┤
+│         Renderer (Chromium)              │
+│           VoiceInputApp                  │
+│         (引擎编排 & UI管理)                │
+├──────────────────────────────────────────┤
+│  SherpaEngine    BaiduEngine   Web Speech│
+│  (sherpa-onnx)   (百度实时ASR)   API      │
+│  WASM离线识别    WebSocket国内直连  在线降级 │
+├──────────────────────────────────────────┤
+│  AudioCapture  → Float32 → Int16 PCM    │
+│  (16kHz mono)    音频格式转换             │
+└──────────────────────────────────────────┘
 ```
 
 ### 引擎对比
@@ -56,29 +75,16 @@
 | **百度实时ASR** | 在线国内 | 国内直连 | 低 | ★★★★★ | 日常使用(推荐) |
 | **Web Speech** | 在线云端 | 需VPN | 中 | ★★★ | 降级兜底 |
 
-### 识别引擎原理
-
-**sherpa-onnx (离线引擎)**
-- 基于 sherpa-onnx WASM SIMD 运行时，在浏览器中加载 Zipformer 模型
-- 使用 OnlineRecognizer API 进行流式识别
-- 模型文件约 190MB，首次加载后浏览器缓存
-
-**百度实时 ASR (在线引擎)**
-- WebSocket 连接 `wss://vop.baidu.com/realtime_asr`
-- OAuth token 鉴权（自动降级为 appkey 模式）
-- 音频缓冲机制，WebSocket 连接建立前不丢失数据
-
-**Web Speech API (在线引擎)**
-- 浏览器内置语音识别，Chrome/Edge 支持
-- 自动重启机制（最多3次），连接断开后恢复
-
 ## 项目结构
 
 ```
 voice-input-method/
-├── index.html                  # 主页面
+├── package.json                # Electron 项目配置
+├── main.js                     # Electron 主进程
+├── preload.js                  # IPC 桥接 (contextBridge)
+├── index.html                  # 渲染进程页面
 ├── css/
-│   └── style.css               # 样式（CSS变量主题系统）
+│   └── style.css               # 样式（含弹出窗口样式）
 ├── js/
 │   ├── app.js                  # 应用入口，引擎编排 & UI管理
 │   ├── baiduEngine.js          # 百度实时ASR引擎 (WebSocket + OAuth)
@@ -89,7 +95,7 @@ voice-input-method/
 │       ├── sherpa-onnx-wasm-main-asr.wasm
 │       └── sherpa-onnx-wasm-main-asr.data  (190MB, gitignored)
 ├── scripts/
-│   └── download-sherpa-models.sh  # 模型下载脚本
+│   └── download-sherpa-models.sh
 └── .gitignore
 ```
 
@@ -102,7 +108,15 @@ git clone https://github.com/hoangtamtoan7-crypto/voice-input-method.git
 cd voice-input-method
 ```
 
-### 2. 下载离线模型（可选，约190MB）
+### 2. 安装依赖
+
+需要 [Node.js](https://nodejs.org/) 18+：
+
+```bash
+npm install
+```
+
+### 3. 下载离线模型（可选，约190MB）
 
 ```bash
 bash scripts/download-sherpa-models.sh
@@ -110,16 +124,13 @@ bash scripts/download-sherpa-models.sh
 
 将 `sherpa-onnx-wasm-main-asr.data` 放入 `js/sherpa/` 目录。
 
-### 3. 启动
-
-通过任意 HTTP 服务器打开（Chrome 不支持 `file://` 下使用麦克风）：
+### 4. 启动
 
 ```bash
-python -m http.server 8080
-# 浏览器打开 http://localhost:8080
+npm start
 ```
 
-### 4. 配置百度引擎（可选，推荐）
+### 5. 配置百度引擎（可选，推荐）
 
 1. [百度智能云控制台](https://console.bce.baidu.com/) → 人工智能 → 语音技术 → 实时语音识别 → 开通服务
 2. 创建应用获取 AppID / API Key / Secret Key
@@ -138,19 +149,21 @@ var BAIDU_CONFIG = {
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Space` | 开始/停止录音 |
+| `Ctrl+Shift+Space` | **全局热键**：开始/停止录音（任意应用中可用） |
+| `Space` | 应用内开始/停止录音 |
 | `Ctrl + Z` | 撤销 |
 | `Ctrl + C` | 复制全部 |
 | `Ctrl + S` | 导出 TXT |
 | `Ctrl + Delete` | 清空 |
 | `Esc` | 关闭弹窗 |
-| `Ctrl + Shift + D` | 调试面板 |
+| `Ctrl + Shift + D` | 调试面板（浏览器模式） |
 
 ## 浏览器兼容性
 
-- **离线引擎**：所有支持 WebAssembly SIMD 的浏览器（Chrome/Edge 90+）
-- **百度引擎**：所有支持 WebSocket 的现代浏览器
-- **在线引擎**：Chrome/Edge（Web Speech API）
+| 模式 | 支持 |
+|------|------|
+| **Electron 桌面应用** | Windows (推荐使用方式) |
+| **网页模式** | Chrome/Edge 90+（通过 HTTP 服务器打开 `index.html`） |
 
 ## 许可证
 

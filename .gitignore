@@ -11,6 +11,16 @@ desktop.ini
 
 # 项目
 *.zip
+.env
+__pycache__/
+.Rhistory
 
-# sherpa-onnx 模型数据过大 (>100MB)，需单独下载
+# Electron
+node_modules/
+dist/
+out/
+.electron-data/
+*.log
+
+# sherpa-onnx 离线模型 (~199MB)，超出Git托管限制，需通过脚本下载
 js/sherpa/sherpa-onnx-wasm-main-asr.data

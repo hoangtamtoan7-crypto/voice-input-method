@@ -405,38 +405,36 @@
       // 检测可用引擎
       var sherpa = typeof SherpaEngine !== 'undefined' ? new SherpaEngine() : null;
       var baidu = typeof BaiduEngine !== 'undefined' ? new BaiduEngine() : null;
+      var iflytek = typeof IflytekEngine !== 'undefined' ? new IflytekEngine() : null;
       var webspeech = new SpeechRecognizer();
-      dbg('引擎: sherpa=' + !!sherpa + ' baidu=' + !!baidu + ' webspeech=' + webspeech.isSupported);
 
       if (sherpa) {
         engines.sherpa = sherpa;
       }
       if (baidu && baidu.isConfigured) {
         engines.baidu = baidu;
-        dbg('百度引擎已添加, isConfigured=true');
-      } else {
-        dbg('百度引擎未添加: baidu=' + !!baidu + ' isConfigured=' + (baidu ? baidu.isConfigured : 'N/A'));
+      }
+      if (iflytek && iflytek.isSupported) {
+        engines.iflytek = iflytek;
       }
       if (webspeech.isSupported) {
         engines.webspeech = webspeech;
       }
 
-      // 选择引擎：离线 > 百度 > 在线
-      dbg('引擎列表: ' + Object.keys(engines).join(', '));
-      if (engines.sherpa) {
-        dbg('→ 选择离线引擎');
-        setEngine('sherpa');
+      // 选择引擎：讯飞 > 百度 > 离线 > 在线
+      if (engines.iflytek) {
+        setEngine('iflytek');
       } else if (engines.baidu) {
-        dbg('→ 选择百度引擎');
         setEngine('baidu');
+      } else if (engines.sherpa) {
+        setEngine('sherpa');
       } else if (engines.webspeech) {
-        dbg('→ 选择在线引擎');
         setEngine('webspeech');
       } else {
-        // 两个引擎都不可用
+        // 所有引擎都不可用
         ui.setStatus('error', '无可用引擎');
         els.recordBtn.disabled = true;
-        els.recordHint.textContent = '语音识别不可用——请安装离线模型或使用Chrome';
+        els.recordHint.textContent = '语音识别不可用——请下载sherpa-onnx离线模型或使用Chrome浏览器';
         ui.showToast('请使用Chrome浏览器或安装离线语音模型', 5000, true);
         updateEngineBadge();
         return;
@@ -457,6 +455,7 @@
       recognizer.language = ui.getLanguage();
       ui.renderHistory(storage.getAll(), function (id) { deleteHistory(id); });
       bindEvents();
+      setupElectronIPC();
       ui.setEditable(true);
       updateEngineBadge();
     }
@@ -507,7 +506,7 @@
           var nextName = engineNames[(currentIdx + 1) % engineNames.length];
           setEngine(nextName);
           setupRecognizerCallbacks();
-          var labels = { sherpa: '离线引擎 (sherpa-onnx)', baidu: '百度引擎 (国内直连)', webspeech: '在线引擎 (Web Speech)' };
+          var labels = { iflytek: '讯飞引擎 (高精度)', sherpa: '离线引擎 (sherpa-onnx)', baidu: '百度引擎 (国内直连)', webspeech: '在线引擎 (Web Speech)' };
           ui.showToast('已切换到' + (labels[nextName] || nextName), 2000);
         });
       }
@@ -519,7 +518,12 @@
       badge.className = 'engine-badge';
       if (activeEngineName === 'sherpa') {
         badge.textContent = '离线引擎';
-        badge.title = 'sherpa-onnx 本地识别，无需网络';
+        badge.classList.add('offline');
+        badge.title = 'sherpa-onnx 纯本地识别，无需网络';
+      } else if (activeEngineName === 'iflytek') {
+        badge.textContent = '讯飞引擎';
+        badge.classList.add('iflytek');
+        badge.title = '讯飞语音识别，中文最高精度';
       } else if (activeEngineName === 'baidu') {
         badge.textContent = '百度引擎';
         badge.classList.add('baidu');
@@ -533,6 +537,36 @@
         badge.classList.add('unavailable');
         badge.title = '请安装离线模型、配置百度API或使用Chrome';
       }
+    }
+
+    function setupElectronIPC() {
+      if (!window.electronAPI) return;
+
+      var mode = window.electronAPI.getMode();
+
+      if (mode === 'popup') {
+        // Popup/compact mode: listen for main process commands
+        window.electronAPI.onStartRecording(function () {
+          if (!recognizer || !recognizer.isListening) {
+            toggleRecording();
+          }
+        });
+
+        window.electronAPI.onStopRecording(function () {
+          if (recognizer && recognizer.isListening) {
+            autoRestart = false;
+            recognizer.stop();
+          }
+        });
+      }
+
+      // Both modes: listen for engine switch from tray menu
+      window.electronAPI.onSetEngine(function (engine) {
+        if (engines[engine] && activeEngineName !== engine) {
+          setEngine(engine);
+          setupRecognizerCallbacks();
+        }
+      });
     }
 
     function pushUndo(text) {
@@ -685,6 +719,10 @@
             finalText += TextProcessor.fixPunctuation(result.final, lang);
             pushUndo(finalText);
             saveDraft();
+            // Popup模式: 实时流式发送到聊天框
+            if (window.electronAPI && window.electronAPI.getMode() === 'popup') {
+              window.electronAPI.streamText(finalText);
+            }
           }
           ui.updateText(finalText, result.interim);
         };
@@ -718,6 +756,20 @@
           ui.setRecordingState(false);
           ui.stopTimer();
           ui.setStatus('ready', '就绪');
+
+          // Popup mode: send result to main process for auto-paste
+          var isPopup = window.electronAPI && window.electronAPI.getMode() === 'popup';
+          if (isPopup) {
+            if (finalText.trim()) {
+              storage.add(finalText);
+              window.electronAPI.recordingResult(finalText);
+            } else {
+              window.electronAPI.cancelRecording();
+            }
+            finalText = '';
+            ui.updateText('');
+            return;
+          }
 
           if (finalText.trim()) {
             storage.add(finalText);
@@ -766,6 +818,7 @@
 
     function toggleRecording() {
       var dbg = window._debugLog || function(){};
+      if (!recognizer) { ui.showToast('引擎未就绪，请稍候再试', 2000, true); return; }
       if (recognizer.isListening) {
         dbg('[app] 手动停止录音');
         autoRestart = false;
@@ -776,29 +829,67 @@
         isStarting = true;
         autoRestart = true;
         autoRestartCount = 0;
-        dbg('[app] 开始录音, 引擎=' + activeEngineName);
-        var result = recognizer.start();
 
-        function handleStart(r) {
-          isStarting = false;
-          dbg('[app] start 结果: success=' + (r && r.success) + (r && r.error ? ' error=' + r.error : ''));
-          if (r && r.success) {
-            ui.setRecordingState(true);
-            ui.setStatus('listening', '录音中');
-            ui.startTimer();
-          } else {
-            ui.showToast(r ? r.error : '启动失败', 3000, true);
-          }
-        }
+        // Engine fallback order: iflytek → baidu → sherpa → webspeech
+        var engineOrder = ['iflytek', 'baidu', 'sherpa', 'webspeech'];
+        var tryIndex = engineOrder.indexOf(activeEngineName);
+        if (tryIndex < 0) tryIndex = 0;
 
-        if (result && result.then) {
-          result.then(handleStart).catch(function (err) {
+        tryStartEngine(tryIndex);
+
+        function tryStartEngine(index) {
+          if (index >= engineOrder.length) {
             isStarting = false;
-            dbg('[app] start Promise 失败: ' + (err && err.message));
-            ui.showToast(err.message || '启动失败', 3000, true);
-          });
-        } else {
-          handleStart(result);
+            ui.setStatus('error', '无可用引擎');
+            ui.showToast('所有引擎启动失败——请检查麦克风权限或网络连接', 5000, true);
+            return;
+          }
+
+          var name = engineOrder[index];
+          if (!engines[name]) {
+            dbg('[app] 引擎 ' + name + ' 不可用，跳过');
+            tryStartEngine(index + 1);
+            return;
+          }
+
+          if (activeEngineName !== name) {
+            dbg('[app] 降级切换引擎: ' + activeEngineName + ' → ' + name);
+            if (recognizer && recognizer.isListening) recognizer.stop();
+            activeEngineName = name;
+            recognizer = engines[name];
+            activeEngine = engines[name];
+            setupRecognizerCallbacks();
+            updateEngineBadge();
+          }
+
+          dbg('[app] 尝试启动引擎: ' + name);
+          ui.setStatus('ready', '正在初始化 ' + name + '...');
+          var result = recognizer.start();
+
+          function handleStart(r) {
+            dbg('[app] 引擎 ' + name + ' start 结果: success=' + (r && r.success) + (r && r.error ? ' error=' + r.error : ''));
+            if (r && r.success) {
+              isStarting = false;
+              ui.setRecordingState(true);
+              ui.setStatus('listening', '录音中');
+              ui.startTimer();
+              var labels = { iflytek: '讯飞引擎', sherpa: '离线引擎', baidu: '百度引擎', webspeech: '在线引擎' };
+              ui.showToast('使用 ' + (labels[name] || name), 1500);
+            } else {
+              var errMsg = (r && r.error) ? r.error : '启动失败';
+              dbg('[app] ' + name + ' 启动失败: ' + errMsg, 'warn');
+              tryStartEngine(index + 1);
+            }
+          }
+
+          if (result && result.then) {
+            result.then(handleStart).catch(function (err) {
+              dbg('[app] ' + name + ' Promise 失败: ' + (err && err.message), 'warn');
+              tryStartEngine(index + 1);
+            });
+          } else {
+            handleStart(result);
+          }
         }
       }
     }

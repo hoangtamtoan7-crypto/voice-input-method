@@ -15,83 +15,17 @@ var BaiduEngine = (function () {
     appid: '123427753',       // 百度智能云 AppID
     appkey: '7XY6mrmLuUxvpEM6bhuGGF7a',      // 百度智能云 API Key
     secret: 'AmWWRC68o1Gxz9vjtk98iKmUG0lcSr0E',      // 百度智能云 Secret Key
-    dev_pid: 1537,   // 识别模型: 1537=普通话(通用) 15372=普通话(加强标点) 1737=英语
+    dev_pid: 15373,  // 识别模型: 15373=普通话(输入法优化) 1537=普通话(通用) 15372=普通话(加强标点)
     wsUrl: 'wss://vop.baidu.com/realtime_asr'
   };
 
   // 语言 → dev_pid 映射
   var LANG_TO_PID = {
-    'zh-CN': 1537,
-    'cmn-Hans-CN': 1537,
+    'zh-CN': 15373,
+    'cmn-Hans-CN': 15373,
     'en-US': 1737,
     'yue-Hant-HK': 15376  // 多方言模型，支持粤语
   };
-
-  // ========== 音频捕获 ==========
-  function AudioCapture() {
-    var audioContext = null;
-    var source = null;
-    var processor = null;
-    var stream = null;
-    var onSamples = null;
-    var sampleRate = 16000;
-    var isCapturing = false;
-
-    function init() {
-      var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return Promise.reject(new Error('浏览器不支持AudioContext'));
-      audioContext = new AudioContextClass({ sampleRate: sampleRate });
-      if (audioContext.state === 'suspended') audioContext.resume();
-
-      return navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, sampleRate: sampleRate, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      }).then(function (mediaStream) {
-        stream = mediaStream;
-        source = audioContext.createMediaStreamSource(stream);
-        var actualRate = audioContext.sampleRate;
-        processor = audioContext.createScriptProcessor(4096, 1, 1);
-        source.connect(processor);
-        var zeroGain = audioContext.createGain();
-        zeroGain.gain.value = 0;
-        processor.connect(zeroGain);
-        zeroGain.connect(audioContext.destination);
-
-        processor.onaudioprocess = function (event) {
-          if (!isCapturing || !onSamples) return;
-          var input = event.inputBuffer.getChannelData(0);
-          var samples;
-          if (actualRate !== sampleRate) {
-            var ratio = actualRate / sampleRate;
-            var outLen = Math.floor(input.length / ratio);
-            samples = new Float32Array(outLen);
-            for (var i = 0; i < outLen; i++) samples[i] = input[Math.floor(i * ratio)];
-          } else {
-            samples = new Float32Array(input);
-          }
-          onSamples(samples);
-        };
-      });
-    }
-
-    return {
-      start: function (cb) {
-        if (isCapturing) return Promise.resolve();
-        if (!audioContext) {
-          return init().then(function () { isCapturing = true; onSamples = cb; });
-        }
-        isCapturing = true;
-        onSamples = cb;
-        return Promise.resolve();
-      },
-      stop: function () {
-        isCapturing = false; onSamples = null;
-        if (processor) { processor.disconnect(); processor = null; }
-        if (source) { source.disconnect(); source = null; }
-        if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-        if (audioContext && audioContext.state !== 'closed') { audioContext.close().catch(function () {}); audioContext = null; }
-      }
-    };
-  }
 
   // ========== Float32 PCM → Int16 PCM（小端） ==========
   function float32ToInt16(float32) {
@@ -103,38 +37,12 @@ var BaiduEngine = (function () {
     return int16;
   }
 
-  // ========== OAuth Token 管理 ==========
-  var tokenCache = null;
-  var tokenExpiry = 0;
-
-  function fetchToken() {
-    var dbg = window._debugLog || function(){};
-    if (tokenCache && Date.now() < tokenExpiry) {
-      return Promise.resolve(tokenCache);
-    }
-    var url = 'https://aip.baidubce.com/oauth/2.0/token'
-      + '?grant_type=client_credentials'
-      + '&client_id=' + encodeURIComponent(BAIDU_CONFIG.appkey)
-      + '&client_secret=' + encodeURIComponent(BAIDU_CONFIG.secret);
-    return fetch(url, { method: 'POST' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.access_token) {
-          tokenCache = data.access_token;
-          tokenExpiry = Date.now() + (data.expires_in || 2592000) * 1000 - 60000;
-          return tokenCache;
-        }
-        throw new Error(data.error_description || data.error || '获取access token失败');
-      });
-  }
-
   // ========== BaiduEngine ==========
   function BaiduEngine() {
     var isListening = false;
     var audioCapture = AudioCapture();
     var ws = null;
     var sn = ''; // 会话ID
-    var tokenPromise = null; // 正在获取中的token
 
     // 回调
     var resultCallback = null;
@@ -154,14 +62,16 @@ var BaiduEngine = (function () {
       return !!(BAIDU_CONFIG.appid && BAIDU_CONFIG.appkey && BAIDU_CONFIG.secret);
     }
 
-    function doStart(token) {
+    function doStart() {
       var dbg = window._debugLog || function(){};
       sn = getSn();
       var url = BAIDU_CONFIG.wsUrl + '?sn=' + sn;
 
+      dbg('[百度] 连接 WebSocket: ' + url);
       try {
         ws = new WebSocket(url);
       } catch (e) {
+        dbg('[百度] WebSocket 创建失败: ' + e.message, 'error');
         return { success: false, error: 'WebSocket连接失败: ' + e.message };
       }
 
@@ -173,20 +83,19 @@ var BaiduEngine = (function () {
 
       ws.onopen = function () {
         wsOpened = true;
+        dbg('[百度] WebSocket 已连接');
         var startData = {
           appid: parseInt(BAIDU_CONFIG.appid),
+          appkey: BAIDU_CONFIG.appkey,
           dev_pid: currentPid,
           cuid: 'voice-input-' + (BAIDU_CONFIG.appid),
           format: 'pcm',
           sample: 16000
         };
-        if (token) {
-          startData.token = token;
-        } else {
-          startData.appkey = BAIDU_CONFIG.appkey;
-        }
+        dbg('[百度] 发送 START: dev_pid=' + currentPid + ' appkey鉴权');
         ws.send(JSON.stringify({ type: 'START', data: startData }));
         if (audioBuffer.length > 0) {
+          dbg('[百度] 发送缓冲音频: ' + audioBuffer.length + ' 块');
           for (var i = 0; i < audioBuffer.length; i++) {
             if (ws.readyState === WebSocket.OPEN) ws.send(audioBuffer[i]);
           }
@@ -224,7 +133,8 @@ var BaiduEngine = (function () {
         if (errorCallback) errorCallback({ error: 'network', message: '百度服务连接失败' });
       };
 
-      ws.onclose = function () {
+      ws.onclose = function (e) {
+        dbg('[百度] WebSocket 关闭: code=' + (e && e.code) + ' reason=' + (e && e.reason));
         isListening = false;
         audioCapture.stop();
         audioBuffer = [];
@@ -232,6 +142,7 @@ var BaiduEngine = (function () {
       };
 
       // 开始音频捕获
+      dbg('[百度] 启动音频捕获...');
       return audioCapture.start(function (samples) {
         if (!ws) return;
         var int16Data = float32ToInt16(samples);
@@ -277,17 +188,8 @@ var BaiduEngine = (function () {
         if (!isConfigured()) return { success: false, error: '百度API未配置，请在 js/baiduEngine.js 中填入 appid/appkey/secret' };
 
         var dbg = window._debugLog || function(){};
-
-        // 尝试获取 token，失败则降级为 appkey 直接鉴权
-        if (!tokenPromise) tokenPromise = fetchToken();
-        return tokenPromise.then(function (token) {
-          tokenPromise = null;
-          return doStart(token);
-        }).catch(function (err) {
-          tokenPromise = null;
-          dbg('[百度] Token获取失败，降级使用 appkey 鉴权: ' + err.message);
-          return doStart(null); // null → 使用 appkey 模式
-        });
+        dbg('[百度] 开始启动 (appkey直接鉴权)...');
+        return doStart();
       },
 
       stop: function () {

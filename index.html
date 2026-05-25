@@ -7,6 +7,12 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <script>
+    (function() {
+      var p = new URLSearchParams(window.location.search);
+      if (p.get('mode') === 'popup') document.body.classList.add('electron-popup');
+    })();
+  </script>
   <div class="app-container">
     <header class="app-header">
       <h1 class="app-title">
@@ -33,7 +39,7 @@
             <span class="status-dot"></span>
             <span class="status-text" id="statusText">就绪</span>
           </div>
-          <span class="engine-badge" id="engineBadge" title="当前识别引擎">离线引擎</span>
+          <span class="engine-badge" id="engineBadge" title="当前识别引擎">加载中...</span>
           <span class="status-time" id="statusTime"></span>
         </div>
 
@@ -151,7 +157,7 @@
     </main>
 
     <footer class="app-footer">
-      <p>三引擎架构（离线 · 百度 · 在线）| 七牛云 XEngineer 实训营</p>
+      <p>四引擎智能路由（讯飞 · 百度 · 离线 · 在线）| 七牛云 XEngineer 实训营</p>
     </footer>
   </div>
 
@@ -160,6 +166,7 @@
     <div class="modal-content">
       <h3>快捷键</h3>
       <ul class="shortcut-list">
+        <li><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> 全局热键（任意应用中唤起）</li>
         <li><kbd>Space</kbd> 开始/停止录音</li>
         <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> 撤销最后识别内容</li>
         <li><kbd>Ctrl</kbd> + <kbd>C</kbd> 复制全部文本</li>
@@ -171,14 +178,74 @@
     </div>
   </div>
 
+  <script src="js/audioCapture.js"></script>
   <script src="js/sherpaEngine.js"></script>
   <script src="js/baiduEngine.js"></script>
+  <script src="js/iflytekEngine.js"></script>
   <script src="js/app.js"></script>
-  <!-- 诊断日志（浏览器控制台查看） -->
+  <!-- 诊断日志面板（默认隐藏，双击底部60px区域切换） -->
+  <div id="debugPanel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:160px;overflow-y:auto;background:rgba(0,0,0,0.88);color:#0f0;font:11px/1.4 monospace;padding:6px 10px;z-index:9999;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;color:#999;">
+      <span>诊断日志 (双击底部切换)</span>
+      <span style="cursor:pointer;font-size:14px;" onclick="document.getElementById('debugPanel').style.display='none'" title="关闭">✕</span>
+    </div>
+    <div id="debugLogContent"></div>
+  </div>
   <script>
     (function() {
-      window._debugLog = function(msg) { console.log(msg); };
-      if (window.location.protocol === 'file:') console.warn('file:// 协议 — 音频捕获和WASM加载受限，请使用HTTP服务器');
+      var maxLines = 60;
+      var lines = [];
+      var panelEl = null;
+      var contentEl = null;
+
+      function render() {
+        if (!panelEl) {
+          panelEl = document.getElementById('debugPanel');
+          contentEl = document.getElementById('debugLogContent');
+        }
+        if (panelEl && contentEl) {
+          contentEl.textContent = lines.join('\n');
+          contentEl.scrollTop = contentEl.scrollHeight;
+        }
+      }
+
+      var PREFIXES = { log: '', warn: '[WARN] ', error: '[ERROR] ' };
+
+      window._debugLog = function(msg, level) {
+        level = level || 'log';
+        var t = new Date().toLocaleTimeString();
+        var line = '[' + t + '] ' + (PREFIXES[level] || '') + msg;
+        console[level](msg);
+        lines.push(line);
+        if (lines.length > maxLines) lines = lines.slice(-maxLines);
+        render();
+      };
+
+      window._showDebugPanel = function() {
+        var p = document.getElementById('debugPanel');
+        if (p) { p.style.display = 'block'; render(); }
+      };
+
+      window._hideDebugPanel = function() {
+        var p = document.getElementById('debugPanel');
+        if (p) { p.style.display = 'none'; render(); }
+      };
+
+      // 双击底部 60px 区域切换诊断面板
+      document.addEventListener('dblclick', function(e) {
+        if (e.clientY > window.innerHeight - 60) {
+          var p = document.getElementById('debugPanel');
+          if (p.style.display === 'none') {
+            p.style.display = 'block'; render();
+          } else {
+            p.style.display = 'none';
+          }
+        }
+      });
+
+      if (window.location.protocol === 'file:') {
+        window._debugLog('file:// 协议 - 音频捕获/WASM受限，Electron已配置安全例外', 'warn');
+      }
     })();
   </script>
 </body>
